@@ -10,7 +10,11 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
   },
   "repository": {
     "type": "git",
@@ -19,23 +23,29 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/Poojan-Patel-Simform/content-publishing-express/issues"
   },
   "homepage": "https://github.com/Poojan-Patel-Simform/content-publishing-express#readme",
   "dependencies": {
-    "express": "^5.2.1"
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.6",
     "@types/node": "^22.20.2",
+    "@types/pg": "^8.23.1",
     "eslint": "^10.10.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.6",
     "globals": "^17.12.0",
     "prettier": "^3.9.6",
+    "prisma": "^7.10.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
