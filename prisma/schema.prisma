@@ -1,7 +1,13 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Content Publishing Workflow — data model
+// Docs: https://pris.ly/d/prisma-schema
+//
+// Design notes live in prisma/SCHEMA.md. The two load-bearing ideas:
+//   1. ContentItem is the stable entity; ContentVersion is an immutable snapshot.
+//      The item points at exactly one published version, so editing a revision
+//      never touches what the public is reading.
+//   2. ScheduledPublication is a claimable job row. Exactly-once publishing comes
+//      from FOR UPDATE SKIP LOCKED plus status-guarded conditional updates, not
+//      from the worker running only once.
 
 generator client {
   provider = "prisma-client"
@@ -11,3 +17,377 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  AUTHOR
+  EDITOR
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+/// Lifecycle of the *item* as the public sees it.
+enum ItemStatus {
+  /// Never published. Only the owning author and editors can see it.
+  DRAFT
+  /// A version is live at ContentItem.publishedVersionId.
+  PUBLISHED
+  /// Was published, pulled from public view, content retained.
+  UNPUBLISHED
+  /// Soft-deleted; invisible everywhere but the audit trail.
+  ARCHIVED
+}
+
+/// Editorial lifecycle of a single version. A version is the unit of review.
+enum VersionStatus {
+  DRAFT
+  PENDING_REVIEW
+  /// Approved but not yet live (awaiting an editor's publish action).
+  APPROVED
+  /// Approved and queued for a future publish time.
+  SCHEDULED
+  /// Rejected with a required comment; the author edits and resubmits.
+  REJECTED
+  /// Currently live. At most one per item (enforced by ContentItem.publishedVersionId).
+  PUBLISHED
+  /// Was live, replaced by a newer published version.
+  SUPERSEDED
+  /// Was live, pulled from public view.
+  UNPUBLISHED
+  /// Abandoned draft, kept for history.
+  DISCARDED
+}
+
+enum ReviewDecision {
+  APPROVE
+  REJECT
+  PUBLISH
+  SCHEDULE
+}
+
+enum JobStatus {
+  PENDING
+  /// Claimed by a worker; lockedBy / lockedAt say which one and since when.
+  CLAIMED
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum AuditAction {
+  ITEM_CREATED
+  VERSION_CREATED
+  VERSION_UPDATED
+  SUBMITTED_FOR_REVIEW
+  REVIEW_APPROVED
+  REVIEW_REJECTED
+  PUBLISHED
+  PUBLISH_SCHEDULED
+  SCHEDULE_CANCELLED
+  SCHEDULED_PUBLISH_EXECUTED
+  UNPUBLISHED
+  REVISION_STARTED
+  REVISION_RESTORED
+  ITEM_ARCHIVED
+  USER_LOGGED_IN
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String     @id @default(uuid(7))
+  email        String     @unique
+  /// Argon2id hash. Never selected into any API response.
+  passwordHash String
+  displayName  String
+  role         UserRole   @default(AUTHOR)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  ownedItems       ContentItem[]    @relation("ItemAuthor")
+  authoredVersions ContentVersion[] @relation("VersionAuthor")
+  reviews          Review[]
+  auditEvents      AuditEvent[]
+  sessions         Session[]
+
+  @@index([role, status])
+  @@map("users")
+}
+
+/// Refresh-token family. The token itself is stored hashed, never in plain text.
+model Session {
+  id               String    @id @default(uuid(7))
+  userId           String
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Taxonomy
+// ---------------------------------------------------------------------------
+
+model Category {
+  id        String   @id @default(uuid(7))
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  versions ContentVersion[]
+
+  @@map("categories")
+}
+
+model Tag {
+  id        String   @id @default(uuid(7))
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  versions ContentVersionTag[]
+
+  @@map("tags")
+}
+
+/// Explicit join so tags are snapshotted per version, not per item —
+/// retagging a draft must not rewrite what the live version was tagged with.
+model ContentVersionTag {
+  versionId String
+  tagId     String
+
+  version ContentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  tag     Tag            @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([versionId, tagId])
+  @@index([tagId])
+  @@map("content_version_tags")
+}
+
+// ---------------------------------------------------------------------------
+// Content
+// ---------------------------------------------------------------------------
+
+/// The stable, publicly addressable entity. Holds no body text of its own —
+/// everything readable lives in a ContentVersion.
+model ContentItem {
+  id       String     @id @default(uuid(7))
+  slug     String     @unique
+  authorId String
+  status   ItemStatus @default(DRAFT)
+
+  /// The version the public is served. Null until the first publish.
+  /// A revision-in-progress is a *different* row, so it cannot clobber this.
+  publishedVersionId String? @unique
+
+  /// Denormalised from the published version for cheap keyset pagination
+  /// of the public listing without joining ContentVersion.
+  publishedTitle String?
+  publishedAt    DateTime?
+  unpublishedAt  DateTime?
+
+  /// Monotonic counter; the source of the next versionNumber. Bumped inside the
+  /// same transaction that creates a version, so numbers never collide or reuse.
+  versionCounter Int @default(0)
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  archivedAt DateTime?
+
+  author           User                   @relation("ItemAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  publishedVersion ContentVersion?        @relation("PublishedVersion", fields: [publishedVersionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  versions         ContentVersion[]       @relation("ItemVersions")
+  reviews          Review[]
+  scheduledJobs    ScheduledPublication[]
+  auditEvents      AuditEvent[]
+
+  /// Public listing: WHERE status = 'PUBLISHED' ORDER BY publishedAt DESC, id DESC.
+  @@index([status, publishedAt(sort: Desc), id(sort: Desc)])
+  /// Author dashboard ("my content") and editor queues filtered by owner.
+  @@index([authorId, status, updatedAt(sort: Desc)])
+  @@index([updatedAt(sort: Desc), id(sort: Desc)])
+  @@map("content_items")
+}
+
+/// An immutable-once-published snapshot of the content. Drafts are mutable;
+/// any version that has been PUBLISHED is never edited again — a revision
+/// creates a new row seeded from it.
+model ContentVersion {
+  id            String        @id @default(uuid(7))
+  contentItemId String
+  /// 1-based, unique per item. Ordering key for the history view.
+  versionNumber Int
+  status        VersionStatus @default(DRAFT)
+
+  title      String
+  body       String
+  excerpt    String?
+  categoryId String?
+
+  /// The version this one was branched from, so "revise the live post" is a
+  /// traceable edge in the history rather than an unexplained new row.
+  parentVersionId String?
+
+  /// What the author/editor said changed. Required by the API on every new version.
+  changeSummary String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  submittedAt   DateTime?
+  reviewedAt    DateTime?
+  publishedAt   DateTime?
+  unpublishedAt DateTime?
+  supersededAt  DateTime?
+
+  /// Set only while status = SCHEDULED. Mirrors the live job's scheduledFor.
+  scheduledPublishAt DateTime?
+
+  item             ContentItem            @relation("ItemVersions", fields: [contentItemId], references: [id], onDelete: Cascade)
+  publishedForItem ContentItem?           @relation("PublishedVersion")
+  createdBy        User                   @relation("VersionAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  category         Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  parentVersion    ContentVersion?        @relation("VersionLineage", fields: [parentVersionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  childVersions    ContentVersion[]       @relation("VersionLineage")
+  tags             ContentVersionTag[]
+  reviews          Review[]
+  scheduledJobs    ScheduledPublication[]
+
+  @@unique([contentItemId, versionNumber])
+  /// History view for one item.
+  @@index([contentItemId, versionNumber(sort: Desc)])
+  /// Editor review queue: WHERE status = 'PENDING_REVIEW' ORDER BY submittedAt ASC.
+  @@index([status, submittedAt])
+  /// Safety net for reconciling versions whose job row went missing.
+  @@index([status, scheduledPublishAt])
+  @@map("content_versions")
+}
+
+/// One row per editorial decision. Append-only: a later decision never edits
+/// an earlier one, so the review trail of a version is complete.
+model Review {
+  id            String         @id @default(uuid(7))
+  contentItemId String
+  versionId     String
+  reviewerId    String
+  decision      ReviewDecision
+  /// Mandatory for REJECT. Enforced in the request schema and by a CHECK
+  /// constraint added in the migration (see prisma/SCHEMA.md).
+  comment       String?
+  /// Present when decision = SCHEDULE.
+  scheduledFor  DateTime?
+  createdAt     DateTime       @default(now())
+
+  item     ContentItem    @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  version  ContentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  reviewer User           @relation(fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([versionId, createdAt(sort: Desc)])
+  @@index([contentItemId, createdAt(sort: Desc)])
+  @@index([reviewerId, createdAt(sort: Desc)])
+  @@map("reviews")
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled publishing
+// ---------------------------------------------------------------------------
+
+/// A claimable unit of work. At most one live (PENDING/CLAIMED) job may exist
+/// per version — enforced by a partial unique index in the migration, which is
+/// what makes "schedule twice" a database error rather than a double publish.
+///
+/// Worker loop:
+///   BEGIN;
+///   SELECT id FROM scheduled_publications
+///     WHERE status = 'PENDING' AND scheduled_for <= now()
+///     ORDER BY scheduled_for
+///     LIMIT $batch
+///     FOR UPDATE SKIP LOCKED;            -- two instances never claim the same row
+///   ... publish ...
+///   UPDATE scheduled_publications SET status = 'SUCCEEDED'
+///     WHERE id = $id AND status = 'PENDING';   -- 0 rows => someone else won, no-op
+///   COMMIT;
+model ScheduledPublication {
+  id            String    @id @default(uuid(7))
+  contentItemId String
+  versionId     String
+  status        JobStatus @default(PENDING)
+
+  /// When the item should go live. Indexed with status for the due-items scan.
+  scheduledFor DateTime
+
+  /// Worker identity + claim time, so a crashed worker's CLAIMED rows can be
+  /// reclaimed after a lease timeout instead of stalling forever.
+  lockedBy       String?
+  lockedAt       DateTime?
+  leaseExpiresAt DateTime?
+
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(5)
+  /// Backoff target; the due-scan uses this when set instead of scheduledFor.
+  nextAttemptAt DateTime?
+  lastError     String?
+
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+  cancelledAt DateTime?
+
+  item    ContentItem    @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  version ContentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  /// The due-items scan. Keeps the 50k-pending-items case an index range scan.
+  @@index([status, scheduledFor])
+  /// Reclaiming expired leases.
+  @@index([status, leaseExpiresAt])
+  @@index([versionId, status])
+  @@index([contentItemId])
+  @@map("scheduled_publications")
+}
+
+// ---------------------------------------------------------------------------
+// Audit trail
+// ---------------------------------------------------------------------------
+
+/// Append-only. Never updated, never deleted. `actorId` is null only for
+/// actions taken by the scheduler itself.
+model AuditEvent {
+  id            String      @id @default(uuid(7))
+  action        AuditAction
+  actorId       String?
+  contentItemId String?
+  versionId     String?
+  /// Correlates a trace back to the HTTP request that caused it.
+  requestId     String?
+  /// Before/after diff or job details. Shape depends on `action`.
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+
+  actor User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  item  ContentItem? @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+
+  @@index([contentItemId, createdAt(sort: Desc)])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@map("audit_events")
+}
+
