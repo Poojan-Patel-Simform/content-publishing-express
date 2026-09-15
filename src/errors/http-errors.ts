@@ -54,3 +54,18 @@ export class ServiceUnavailableError extends AppError {
     super(message, HTTP_STATUS.SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE");
   }
 }
+
+export class EmailNotVerifiedError extends AppError {
+  constructor(message = "Email address is not verified") {
+    super(message, HTTP_STATUS.FORBIDDEN, "EMAIL_NOT_VERIFIED");
+  }
+}
+
+/** A racing tab replayed the previous refresh token while its sibling request
+ * was already rotating the family. The honest client already holds the
+ * successor cookie, so the caller must retry rather than treat this as theft. */
+export class RefreshInFlightError extends AppError {
+  constructor(message = "Refresh already in progress, retry with the current cookies") {
+    super(message, HTTP_STATUS.UNAUTHORIZED, "REFRESH_IN_FLIGHT");
+  }
+}

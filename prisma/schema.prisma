@@ -96,6 +96,23 @@ enum AuditAction {
   REVISION_RESTORED
   ITEM_ARCHIVED
   USER_LOGGED_IN
+  USER_REGISTERED
+  EMAIL_VERIFIED
+  USER_LOGGED_OUT
+  PASSWORD_CHANGED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  SESSION_REUSE_DETECTED
+  OAUTH_ACCOUNT_LINKED
+}
+
+enum AuthProvider {
+  GOOGLE
+}
+
+enum TokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
 }
 
 // ---------------------------------------------------------------------------
@@ -105,19 +122,24 @@ enum AuditAction {
 model User {
   id           String     @id @default(uuid(7))
   email        String     @unique
-  /// Argon2id hash. Never selected into any API response.
-  passwordHash String
+  /// Argon2id hash. Null for accounts that only ever signed in via an OAuth
+  /// provider. Never selected into any API response.
+  passwordHash String?
   displayName  String
   role         UserRole   @default(AUTHOR)
   status       UserStatus @default(ACTIVE)
+  emailVerifiedAt DateTime?
+  avatarUrl       String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  ownedItems       ContentItem[]    @relation("ItemAuthor")
-  authoredVersions ContentVersion[] @relation("VersionAuthor")
-  reviews          Review[]
-  auditEvents      AuditEvent[]
-  sessions         Session[]
+  ownedItems         ContentItem[]        @relation("ItemAuthor")
+  authoredVersions   ContentVersion[]     @relation("VersionAuthor")
+  reviews            Review[]
+  auditEvents        AuditEvent[]
+  sessions           Session[]
+  accounts           Account[]
+  verificationTokens VerificationToken[]
 
   @@index([role, status])
   @@map("users")
@@ -128,6 +150,11 @@ model Session {
   id               String    @id @default(uuid(7))
   userId           String
   refreshTokenHash String    @unique
+  /// Shared by every rotation descending from one login, so reuse detection can
+  /// revoke every descendant of a stolen token, not just the one presented.
+  familyId         String
+  /// Set when this row is swapped for its successor during rotation.
+  rotatedAt        DateTime?
   userAgent        String?
   ipAddress        String?
   expiresAt        DateTime
@@ -138,7 +165,42 @@ model Session {
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
+  @@index([familyId])
   @@map("sessions")
+}
+
+/// A linked external identity provider account for a user.
+model Account {
+  id                String       @id @default(uuid(7))
+  userId            String
+  provider          AuthProvider
+  /// The provider's stable subject id -- never the email, which can change.
+  providerAccountId String
+  createdAt         DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+/// Single-use tokens for email verification and password reset, discriminated
+/// by purpose. The raw token is emailed; only its SHA-256 is stored here.
+model VerificationToken {
+  id         String       @id @default(uuid(7))
+  userId     String
+  purpose    TokenPurpose
+  tokenHash  String       @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, consumedAt])
+  @@index([expiresAt])
+  @@map("verification_tokens")
 }
 
 // ---------------------------------------------------------------------------

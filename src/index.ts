@@ -5,11 +5,13 @@ import { env } from "./config/env.js";
 import { createApp } from "./app.js";
 import { logger } from "./config/logger.js";
 import { prisma } from "./config/prisma.js";
+import { startSessionCleanup, stopSessionCleanup } from "./jobs/session-cleanup.job.js";
 
 const app = createApp();
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, "Server listening");
+  startSessionCleanup();
 });
 
 let shuttingDown = false;
@@ -28,6 +30,7 @@ const shutdown = async (signal: string, exitCode = 0): Promise<void> => {
   forceExit.unref();
 
   try {
+    stopSessionCleanup();
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
     });

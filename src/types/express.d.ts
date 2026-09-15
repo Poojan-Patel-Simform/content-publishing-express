@@ -1,5 +1,7 @@
 import type { Logger } from "pino";
 
+import type { AuthUser } from "../interfaces/auth.interface.js";
+
 declare global {
   namespace Express {
     interface Request {
@@ -14,6 +16,10 @@ declare global {
        * Express 5 exposes `req.query` as a getter, so it cannot be reassigned.
        */
       validatedQuery?: unknown;
+      /** Set by `requireAuth` / `optionalAuth` once the access token and its
+       * session have both been verified. */
+      user?: AuthUser;
+      sessionId?: string;
     }
   }
 }

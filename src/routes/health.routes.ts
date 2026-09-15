@@ -1,18 +1,15 @@
 import { Router } from "express";
 
 import { prisma } from "../config/prisma.js";
-import { HTTP_STATUS } from "../constants/http-status.js";
 import { ServiceUnavailableError } from "../errors/http-errors.js";
 import { asyncHandler } from "../utils/async-handler.js";
+import { sendSuccess } from "../utils/api-response.js";
 
 export const healthRouter: Router = Router();
 
 /** Liveness: is the process up? Deliberately touches no dependency. */
 healthRouter.get("/", (_req, res) => {
-  res.status(HTTP_STATUS.OK).json({
-    success: true,
-    data: { status: "ok", uptime: process.uptime() },
-  });
+  sendSuccess(res, { status: "ok", uptime: process.uptime() });
 });
 
 /** Readiness: can this instance actually serve traffic? */
@@ -27,9 +24,6 @@ healthRouter.get(
       throw new ServiceUnavailableError("Dependencies are not ready");
     }
 
-    res.status(HTTP_STATUS.OK).json({
-      success: true,
-      data: { status: "ready" },
-    });
+    sendSuccess(res, { status: "ready" });
   }),
 );

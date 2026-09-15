@@ -1,9 +1,11 @@
+import cookieParser from "cookie-parser";
 import express, { type Express } from "express";
 import { pinoHttp } from "pino-http";
 
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { corsMiddleware } from "./middlewares/cors.js";
+import { csrfOriginGuard } from "./middlewares/csrf.js";
 import { errorHandler } from "./middlewares/error-handler.js";
 import { notFound } from "./middlewares/not-found.js";
 import { globalRateLimiter } from "./middlewares/rate-limit.js";
@@ -16,6 +18,10 @@ export const createApp = (): Express => {
 
   // Don't advertise the framework.
   app.disable("x-powered-by");
+
+  // Hop count, not a boolean -- needed for rate limiting and req.ip to see the
+  // real client address behind a reverse proxy.
+  app.set("trust proxy", env.TRUST_PROXY);
 
   // Correlation id first, so every later log line carries it.
   app.use(requestId);
@@ -40,6 +46,10 @@ export const createApp = (): Express => {
   // on the simpler querystring parser instead of qs's nested-object surface.
   app.use(express.json({ limit: env.BODY_LIMIT }));
   app.use(express.urlencoded({ extended: false, limit: env.BODY_LIMIT }));
+
+  // Must precede any route reading cp_at/cp_rt.
+  app.use(cookieParser());
+  app.use(csrfOriginGuard);
 
   app.use("/api/v1", apiRouter);
 
