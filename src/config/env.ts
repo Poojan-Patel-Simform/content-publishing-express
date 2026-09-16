@@ -33,8 +33,12 @@ const envSchema = z
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
     AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
 
-    BODY_LIMIT: z.string().default("100kb"),
+    BODY_LIMIT: z.string().default("1mb"),
     SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+
+    // --- Content publishing ---
+    // Clock-skew allowance for "scheduledFor must be in the future".
+    SCHEDULE_MIN_LEAD_MS: z.coerce.number().int().positive().default(30_000),
 
     // --- App / URLs ---
     APP_NAME: z.string().default("Content Publishing"),
@@ -79,6 +83,14 @@ const envSchema = z
 
     // --- Jobs ---
     SESSION_CLEANUP_INTERVAL_MS: z.coerce.number().int().positive().default(3_600_000),
+
+    // --- Scheduled publishing (BullMQ) ---
+    REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
+    SCHEDULER_ENABLED: z.stringbool().default(true),
+    SCHEDULER_CONCURRENCY: z.coerce.number().int().positive().default(5),
+    SCHEDULER_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
+    SCHEDULER_BACKOFF_MS: z.coerce.number().int().positive().default(30_000),
+    SCHEDULER_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production") {

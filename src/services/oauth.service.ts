@@ -161,7 +161,7 @@ export const resolveGoogleIdentity = async (
   });
   await accountRepository.create(created.id, AuthProvider.GOOGLE, identity.providerAccountId);
   await auditService.recordAuditEvent(AuditAction.USER_REGISTERED, created.id, requestId, {
-    provider: "GOOGLE",
+    metadata: { provider: "GOOGLE" },
   });
   return userRepository.toAuthUser(created);
 };

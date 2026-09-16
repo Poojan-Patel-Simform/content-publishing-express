@@ -1,14 +1,13 @@
-import type { Request } from "express";
 import type { z } from "zod";
 
 import { HTTP_STATUS } from "../constants/http-status.js";
 import { RefreshInFlightError, UnauthorizedError } from "../errors/http-errors.js";
 import { COOKIE_NAMES } from "../constants/auth.js";
 import * as authService from "../services/auth.service.js";
-import type { SessionMeta } from "../services/token.service.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { sendNoContent, sendSuccess } from "../utils/api-response.js";
 import { clearAuthCookies, setAuthCookies } from "../utils/cookies.js";
+import { sessionMetaFromRequest } from "../utils/session-meta.js";
 import type {
   changePasswordSchema,
   emailOnlySchema,
@@ -21,11 +20,6 @@ import type {
 const GENERIC_ACCEPTED = {
   message: "If that address is registered, check your inbox for further instructions.",
 };
-
-const sessionMetaFromRequest = (req: Request): SessionMeta => ({
-  userAgent: req.get("user-agent") ?? null,
-  ipAddress: req.ip ?? null,
-});
 
 export const register = asyncHandler(async (req, res) => {
   const body = req.body as z.infer<typeof registerSchema>;

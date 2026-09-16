@@ -5,13 +5,24 @@ import { env } from "./config/env.js";
 import { createApp } from "./app.js";
 import { logger } from "./config/logger.js";
 import { prisma } from "./config/prisma.js";
+import { disconnectRedis } from "./config/redis.js";
+import {
+  startScheduledPublicationReconciler,
+  stopScheduledPublicationReconciler,
+} from "./jobs/scheduled-publication.reconciler.js";
 import { startSessionCleanup, stopSessionCleanup } from "./jobs/session-cleanup.job.js";
+import {
+  startScheduledPublicationWorker,
+  stopScheduledPublicationWorker,
+} from "./workers/scheduled-publication.worker.js";
 
 const app = createApp();
 
 const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, "Server listening");
   startSessionCleanup();
+  startScheduledPublicationWorker();
+  startScheduledPublicationReconciler();
 });
 
 let shuttingDown = false;
@@ -31,10 +42,13 @@ const shutdown = async (signal: string, exitCode = 0): Promise<void> => {
 
   try {
     stopSessionCleanup();
+    stopScheduledPublicationReconciler();
+    await stopScheduledPublicationWorker();
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
     });
     await prisma.$disconnect();
+    await disconnectRedis();
     logger.info("Shutdown complete");
     process.exit(exitCode);
   } catch (err) {

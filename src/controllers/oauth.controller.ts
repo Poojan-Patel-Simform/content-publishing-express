@@ -1,20 +1,13 @@
-import type { Request } from "express";
-
 import { env, isGoogleConfigured } from "../config/env.js";
 import { COOKIE_NAMES } from "../constants/auth.js";
 import { BadRequestError, NotFoundError } from "../errors/http-errors.js";
 import * as oauthService from "../services/oauth.service.js";
 import { OAuthAccountExistsUnverifiedError } from "../services/oauth.service.js";
 import * as tokenService from "../services/token.service.js";
-import type { SessionMeta } from "../services/token.service.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { clearOAuthStateCookie, setAuthCookies, setOAuthStateCookie } from "../utils/cookies.js";
 import { timingSafeEqualStr } from "../utils/crypto.js";
-
-const sessionMetaFromRequest = (req: Request): SessionMeta => ({
-  userAgent: req.get("user-agent") ?? null,
-  ipAddress: req.ip ?? null,
-});
+import { sessionMetaFromRequest } from "../utils/session-meta.js";
 
 export const googleStart = asyncHandler(async (req, res) => {
   // A blank .env degrades cleanly instead of 500-ing.
