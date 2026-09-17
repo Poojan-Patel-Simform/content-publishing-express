@@ -12,85 +12,83 @@ const csv = z
   )
   .pipe(z.array(z.url({ error: "CORS_ORIGINS must be a comma-separated list of origins" })));
 
+// Every key is required: the process refuses to start rather than fall back to
+// a value baked into the image. Only keys whose absence is a meaningful state
+// -- OAuth disabled, no SMTP auth, host-only cookies -- are `.optional()`.
 const envSchema = z
   .object({
-    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-    PORT: z.coerce.number().int().positive().max(65535).default(4000),
+    NODE_ENV: z.enum(["development", "test", "production"]),
+    PORT: z.coerce.number().int().positive().max(65535),
 
     DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
-    CORS_ORIGINS: csv.default([]),
+    CORS_ORIGINS: csv,
 
-    LOG_LEVEL: z
-      .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
-      .default("info"),
+    LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]),
 
-    RATE_LIMIT_WINDOW_MS: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(15 * 60 * 1000),
-    RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
-    AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+    RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive(),
+    RATE_LIMIT_MAX: z.coerce.number().int().positive(),
+    AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive(),
 
-    BODY_LIMIT: z.string().default("1mb"),
-    SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+    BODY_LIMIT: z.string().min(1),
+    SHUTDOWN_TIMEOUT_MS: z.coerce.number().int().positive(),
 
     // --- Content publishing ---
     // Clock-skew allowance for "scheduledFor must be in the future".
-    SCHEDULE_MIN_LEAD_MS: z.coerce.number().int().positive().default(30_000),
+    SCHEDULE_MIN_LEAD_MS: z.coerce.number().int().positive(),
 
     // --- App / URLs ---
-    APP_NAME: z.string().default("Content Publishing"),
+    APP_NAME: z.string().min(1),
     FRONTEND_URL: z.url(),
     API_PUBLIC_URL: z.url(),
     // A hop count, not a boolean: express-rate-limit v8 refuses a permissive
     // `true`, and a permissive setting lets any client spoof X-Forwarded-For.
-    TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
+    TRUST_PROXY: z.coerce.number().int().min(0).max(10),
 
     // --- JWT ---
     JWT_SECRET: z.string().min(32),
     JWT_ISSUER: z.string().min(1),
     JWT_AUDIENCE: z.string().min(1),
-    ACCESS_TOKEN_TTL_S: z.coerce.number().int().positive().default(900),
-    REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
-    REFRESH_REUSE_GRACE_MS: z.coerce.number().int().nonnegative().default(10_000),
+    ACCESS_TOKEN_TTL_S: z.coerce.number().int().positive(),
+    REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive(),
+    REFRESH_REUSE_GRACE_MS: z.coerce.number().int().nonnegative(),
 
     // --- Cookies ---
-    COOKIE_SECURE: z.stringbool().default(false),
-    COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
+    COOKIE_SECURE: z.stringbool(),
+    COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]),
+    // Unset means a host-only cookie, which is the safer default.
     COOKIE_DOMAIN: z.string().optional(),
 
     // --- Password / token lifetimes ---
-    PASSWORD_MIN_LENGTH: z.coerce.number().int().positive().default(12),
-    EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
-    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
+    PASSWORD_MIN_LENGTH: z.coerce.number().int().positive(),
+    EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive(),
+    PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive(),
 
-    // --- OAuth (blank = provider disabled) ---
-    GOOGLE_CLIENT_ID: z.string().default(""),
-    GOOGLE_CLIENT_SECRET: z.string().default(""),
-    GOOGLE_CALLBACK_URL: z.string().default(""),
-    OAUTH_STATE_TTL_MS: z.coerce.number().int().positive().default(600_000),
+    // --- OAuth (unset = provider disabled) ---
+    GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+    GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+    GOOGLE_CALLBACK_URL: z.string().min(1).optional(),
+    OAUTH_STATE_TTL_MS: z.coerce.number().int().positive(),
 
     // --- Mail ---
-    MAIL_TRANSPORT: z.enum(["smtp", "log"]).default("log"),
-    MAIL_FROM: z.string().default("Content Publishing <no-reply@localhost>"),
+    MAIL_TRANSPORT: z.enum(["smtp", "log"]),
+    MAIL_FROM: z.string().min(1),
     SMTP_HOST: z.string().optional(),
     SMTP_PORT: z.coerce.number().int().positive().optional(),
-    SMTP_SECURE: z.stringbool().default(false),
+    SMTP_SECURE: z.stringbool(),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
 
     // --- Jobs ---
-    SESSION_CLEANUP_INTERVAL_MS: z.coerce.number().int().positive().default(3_600_000),
+    SESSION_CLEANUP_INTERVAL_MS: z.coerce.number().int().positive(),
 
     // --- Scheduled publishing (BullMQ) ---
-    REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
-    SCHEDULER_ENABLED: z.stringbool().default(true),
-    SCHEDULER_CONCURRENCY: z.coerce.number().int().positive().default(5),
-    SCHEDULER_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
-    SCHEDULER_BACKOFF_MS: z.coerce.number().int().positive().default(30_000),
-    SCHEDULER_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+    REDIS_URL: z.string().min(1),
+    SCHEDULER_ENABLED: z.stringbool(),
+    SCHEDULER_CONCURRENCY: z.coerce.number().int().positive(),
+    SCHEDULER_MAX_ATTEMPTS: z.coerce.number().int().positive(),
+    SCHEDULER_BACKOFF_MS: z.coerce.number().int().positive(),
+    SCHEDULER_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive(),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production") {
@@ -136,7 +134,7 @@ const envSchema = z
       value.GOOGLE_CLIENT_SECRET,
       value.GOOGLE_CALLBACK_URL,
     ];
-    const googleSetCount = googleKeys.filter((key) => key !== "").length;
+    const googleSetCount = googleKeys.filter((key) => key !== undefined).length;
     if (googleSetCount !== 0 && googleSetCount !== googleKeys.length) {
       ctx.addIssue({
         code: "custom",
@@ -147,10 +145,10 @@ const envSchema = z
     }
   });
 
-// Blank means "unset" for every optional/defaulted key (`.env` sets
-// GOOGLE_CLIENT_ID=, etc. to ""). Without this filter a present-but-empty
-// value fails validators like `.url()` instead of falling through to the
-// schema default.
+// Blank means "unset": `.env` keeps commented-out placeholders like
+// `GOOGLE_CLIENT_ID=` around, and an empty string should read as absent for
+// the optional keys rather than failing validators like `.url()`. A required
+// key left blank is reported as missing, which is what it is.
 const present = Object.fromEntries(
   Object.entries(process.env).filter(([, value]) => value !== undefined && value !== ""),
 );
@@ -173,4 +171,16 @@ export const env = Object.freeze(parsed.data);
 export const isProduction = env.NODE_ENV === "production";
 export const isDevelopment = env.NODE_ENV === "development";
 export const isTest = env.NODE_ENV === "test";
-export const isGoogleConfigured = env.GOOGLE_CLIENT_ID !== "";
+
+// Narrowed once here so callers get plain strings instead of re-checking each
+// of the three keys; the schema already guarantees they are all-or-nothing.
+export const googleOAuth =
+  env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_CALLBACK_URL
+    ? {
+        clientId: env.GOOGLE_CLIENT_ID,
+        clientSecret: env.GOOGLE_CLIENT_SECRET,
+        callbackUrl: env.GOOGLE_CALLBACK_URL,
+      }
+    : null;
+
+export const isGoogleConfigured = googleOAuth !== null;

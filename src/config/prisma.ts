@@ -7,7 +7,13 @@ declare global {
   var prismaClient: PrismaClient | undefined;
 }
 
-const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+// `max` is deliberately small: DATABASE_URL points at Neon's pooler, and the
+// free tier gives the whole project a modest connection budget. A generous
+// local pool on top of a shared remote pooler just moves the exhaustion.
+const adapter = new PrismaPg({
+  connectionString: env.DATABASE_URL,
+  max: 5,
+});
 
 export const prisma = globalThis.prismaClient ?? new PrismaClient({ adapter });
 

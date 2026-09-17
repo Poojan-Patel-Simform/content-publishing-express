@@ -1,0 +1,26 @@
+# node_modules here is a host build of native modules (@node-rs/argon2).
+# Leaking it into the build context can shadow the container's own install.
+node_modules
+dist
+src/generated
+
+.git
+.gitignore
+
+.env
+.env.*
+!.env.example
+
+*.log
+npm-debug.log*
+
+.vscode
+.idea
+.DS_Store
+
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+*.md
+!prisma/SCHEMA.md

@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose";
 
-import { env } from "../config/env.js";
+import { env, googleOAuth } from "../config/env.js";
 import { AuditAction, AuthProvider } from "../generated/prisma-client/enums.js";
 import { BadRequestError } from "../errors/http-errors.js";
 import type { AuthUser, OAuthIdentity } from "../interfaces/auth.interface.js";
@@ -12,6 +12,13 @@ import * as auditService from "./audit.service.js";
 
 const secretKey = new TextEncoder().encode(env.JWT_SECRET);
 const googleJwks = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
+
+// The routes are 404'd when Google is unconfigured (oauth.controller.ts), so
+// this only fires if a caller reaches these helpers another way.
+const requireGoogle = (): NonNullable<typeof googleOAuth> => {
+  if (!googleOAuth) throw new BadRequestError("Google sign-in is not configured");
+  return googleOAuth;
+};
 
 /** Refused rather than silently taken over: an attacker who pre-registered
  * the victim's address must not inherit the account when the real owner
@@ -57,9 +64,10 @@ export const isSafeReturnTo = (value: string): boolean =>
   value.length > 0 && value.length <= 256 && value.startsWith("/") && !value.startsWith("//");
 
 export const buildGoogleAuthUrl = (state: string, codeChallenge: string): string => {
+  const google = requireGoogle();
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  url.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
-  url.searchParams.set("redirect_uri", env.GOOGLE_CALLBACK_URL);
+  url.searchParams.set("client_id", google.clientId);
+  url.searchParams.set("redirect_uri", google.callbackUrl);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("state", state);
@@ -77,15 +85,16 @@ export const exchangeGoogleCode = async (
   code: string,
   verifier: string,
 ): Promise<OAuthIdentity> => {
+  const google = requireGoogle();
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
-      redirect_uri: env.GOOGLE_CALLBACK_URL,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: google.callbackUrl,
+      client_id: google.clientId,
+      client_secret: google.clientSecret,
       code_verifier: verifier,
     }),
   });
@@ -100,7 +109,7 @@ export const exchangeGoogleCode = async (
   // handful of lines and removes any doubt.
   const { payload } = await jwtVerify(body.id_token, googleJwks, {
     issuer: "https://accounts.google.com",
-    audience: env.GOOGLE_CLIENT_ID,
+    audience: google.clientId,
   });
 
   if (
