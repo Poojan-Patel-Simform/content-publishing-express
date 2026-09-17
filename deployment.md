@@ -285,9 +285,19 @@ DATABASE_URL=postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmod
 
 ### Running migrations
 
-`prisma migrate deploy` is **not** in the Docker `CMD`. Two processes booting at
-once would race the migration lock. Use Render's **Pre-Deploy Command** instead
-(§5), which runs once, before the new instance starts.
+Render's **Pre-Deploy Command** is the textbook place for `migrate deploy` — it
+runs once, in the new image, before traffic is routed. **But it is a paid-plan
+feature: the field does not exist on Free instance types**, and a
+`preDeployCommand` in `render.yaml` is ignored there. Deploying to Free with
+only that configured means the migration never runs.
+
+So on Free, the migration runs at container start via `docker-entrypoint.sh`,
+which execs the real `CMD` afterwards. `migrate deploy` takes a Postgres
+advisory lock, so overlapping boots serialise instead of racing.
+
+When you move to a paid plan (§9), delete the `ENTRYPOINT` line from the
+Dockerfile and set the Pre-Deploy Command instead — that keeps migrations out
+of the request-serving process's boot path.
 
 ---
 
@@ -354,12 +364,12 @@ Dashboard → **New → Web Service** → connect the GitHub repo.
 | Branch | `main` |
 | Instance Type | **Free** |
 | Health Check Path | `/api/v1/health` |
-| Pre-Deploy Command | `npx prisma migrate deploy` |
+| Pre-Deploy Command | *(unavailable on Free — see §3)* |
 | Auto-Deploy | On (or off if you prefer manual) |
 
-The **Pre-Deploy Command** is the important one: Render runs it in the new
-image, once, before routing traffic. That is the correct place for
-`migrate deploy` — not in `CMD`, not in the app's boot path.
+Note the Pre-Deploy Command row. It is the correct place for `migrate deploy`,
+but Render only offers it on paid instance types — on Free, migrations run from
+`docker-entrypoint.sh` at container start instead. See §3, *Running migrations*.
 
 ### 5.2 Environment variables
 
@@ -452,7 +462,7 @@ services:
     region: ohio
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/v1/health
-    preDeployCommand: npx prisma migrate deploy
+    # preDeployCommand is paid-plan only; on free, docker-entrypoint.sh migrates.
     envVars:
       - key: NODE_ENV
         value: production
@@ -618,11 +628,12 @@ In rough order of what to buy first:
 - [x] `/health/ready` pings Redis (1.3)
 - [x] `.dockerignore` created (2.1)
 - [x] `Dockerfile` created (2.2)
+- [x] `docker-entrypoint.sh` runs `migrate deploy` at start (free-tier §3)
 - [ ] Image builds and runs locally against local Postgres/Redis (2.3)
 - [ ] Neon project created, same region, unpooled URL copied (3)
 - [x] `PrismaPg` pool capped at `max: 5` (3)
 - [ ] Render Key Value created, same region, internal URL copied (4)
-- [ ] Web Service created: Docker, free, health check, pre-deploy command (5.1)
+- [ ] Web Service created: Docker, free, health check (5.1)
 - [ ] All env vars set; `TRUST_PROXY=1`, `COOKIE_SECURE=true` (5.2)
 - [ ] `NODE_OPTIONS=--max-old-space-size=384` set (6)
 - [ ] Keep-alive cron hitting `/api/v1/health` every 10 min (7)
