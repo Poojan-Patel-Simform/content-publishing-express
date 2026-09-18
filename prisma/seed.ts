@@ -3,6 +3,8 @@ import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "../src/generated/prisma-client/client.js";
+import { UserRole } from "../src/generated/prisma-client/enums.js";
+import { hashPassword } from "../src/services/password.service.js";
 
 const url = process.env.DATABASE_URL;
 
@@ -80,6 +82,12 @@ const CATEGORIES = [
   { slug: "other", name: "Other" },
 ];
 
+const EDITOR_USER = {
+  email: "editor@gmail.com",
+  password: "Editor@123!",
+  displayName: "Admin",
+};
+
 const main = async () => {
   for (const category of CATEGORIES) {
     await prisma.category.upsert({
@@ -89,6 +97,20 @@ const main = async () => {
     });
     console.log(`Seeded category: ${category.slug}`);
   }
+
+  const passwordHash = await hashPassword(EDITOR_USER.password);
+  await prisma.user.upsert({
+    where: { email: EDITOR_USER.email },
+    update: {},
+    create: {
+      email: EDITOR_USER.email,
+      passwordHash,
+      displayName: EDITOR_USER.displayName,
+      role: UserRole.EDITOR,
+      emailVerifiedAt: new Date(),
+    },
+  });
+  console.log(`Seeded editor user: ${EDITOR_USER.email}`);
 };
 
 main()

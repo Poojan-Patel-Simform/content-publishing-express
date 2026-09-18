@@ -45,7 +45,7 @@ export const listScoped = (
       ...scopeWhere(scope),
       ...(filters.authorId !== undefined ? { authorId: filters.authorId } : {}),
       ...(filters.status !== undefined ? { status: filters.status } : {}),
-      archivedAt: null,
+      ...(filters.status !== "ARCHIVED" ? { archivedAt: null } : {}),
     },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     skip,
@@ -58,7 +58,7 @@ export const countScoped = (scope: AuthorshipScope, filters: ListItemsFilters) =
       ...scopeWhere(scope),
       ...(filters.authorId !== undefined ? { authorId: filters.authorId } : {}),
       ...(filters.status !== undefined ? { status: filters.status } : {}),
-      archivedAt: null,
+      ...(filters.status !== "ARCHIVED" ? { archivedAt: null } : {}),
     },
   });
 
