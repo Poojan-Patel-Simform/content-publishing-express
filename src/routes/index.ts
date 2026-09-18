@@ -11,12 +11,14 @@ import { contentRouter } from "./content.routes.js";
 import { editorialRouter } from "./editorial.routes.js";
 import { healthRouter } from "./health.routes.js";
 import { publicContentRouter } from "./public-content.routes.js";
+import { taxonomyRouter } from "./taxonomy.routes.js";
 
 export const apiRouter: Router = Router();
 
 apiRouter.use("/health", healthRouter);
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/content", publicContentRouter);
+apiRouter.use("/categories", taxonomyRouter);
 apiRouter.use("/items", requireAuth, requireActiveAccount, requireVerifiedEmail, contentRouter);
 apiRouter.use(
   "/editorial",

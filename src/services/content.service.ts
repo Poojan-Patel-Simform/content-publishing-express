@@ -89,13 +89,17 @@ const resolveUniqueSlug = async (title: string): Promise<string> => {
   return candidate;
 };
 
+const requireCategoryBySlug = async (slug: string) => {
+  const category = await taxonomyRepository.findCategoryBySlug(slug);
+  if (!category) throw new ValidationError(`Unknown category: ${slug}`);
+  return category;
+};
+
 const resolveTaxonomy = async (
   categorySlug: string | undefined,
   tagSlugs: string[] | undefined,
 ): Promise<{ categoryId: string | null; tagIds: string[] }> => {
-  const category = categorySlug
-    ? await taxonomyRepository.upsertCategoryBySlug(categorySlug)
-    : null;
+  const category = categorySlug ? await requireCategoryBySlug(categorySlug) : null;
   const tags = tagSlugs ? await taxonomyRepository.upsertTagsBySlug(tagSlugs) : [];
   return { categoryId: category?.id ?? null, tagIds: tags.map((tag) => tag.id) };
 };
@@ -231,7 +235,7 @@ export const updateVersion = async (
       ? undefined
       : input.categorySlug === null
         ? null
-        : (await taxonomyRepository.upsertCategoryBySlug(input.categorySlug)).id;
+        : (await requireCategoryBySlug(input.categorySlug)).id;
   const tagIds = input.tagSlugs
     ? (await taxonomyRepository.upsertTagsBySlug(input.tagSlugs)).map((tag) => tag.id)
     : undefined;

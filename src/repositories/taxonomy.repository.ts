@@ -7,12 +7,7 @@ const slugToName = (slug: string): string =>
     .map((word) => word[0]?.toUpperCase() + word.slice(1))
     .join(" ");
 
-export const upsertCategoryBySlug = (slug: string) =>
-  prisma.category.upsert({
-    where: { slug },
-    update: {},
-    create: { slug, name: slugToName(slug) },
-  });
+export const listCategories = () => prisma.category.findMany({ orderBy: { name: "asc" } });
 
 export const upsertTagsBySlug = async (slugs: string[]) => {
   if (slugs.length === 0) return [];

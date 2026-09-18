@@ -83,6 +83,12 @@ export interface PublicContentDetailDto {
   publishedAt: Date;
 }
 
+export interface CategoryDto {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 export interface PagedResult<T> {
   items: T[];
   meta: PageMeta;
