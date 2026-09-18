@@ -43,6 +43,7 @@ const toItemDto = (item: ContentItemModel): ContentItemDto => ({
 
 const toVersionSummaryDto = (version: ContentVersionModel): ContentVersionSummaryDto => ({
   id: version.id,
+  contentItemId: version.contentItemId,
   versionNumber: version.versionNumber,
   status: version.status,
   title: version.title,

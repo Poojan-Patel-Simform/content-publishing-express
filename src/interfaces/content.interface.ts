@@ -29,6 +29,7 @@ export interface ContentVersionDto {
 
 export interface ContentVersionSummaryDto {
   id: string;
+  contentItemId: string;
   versionNumber: number;
   status: VersionStatus;
   title: string;
@@ -37,6 +38,13 @@ export interface ContentVersionSummaryDto {
   createdAt: Date;
   submittedAt: Date | null;
   publishedAt: Date | null;
+}
+
+/** A review-queue row. The queue is the one place a version is read without
+ * its item already in hand, so it carries the author identity the editor needs
+ * to triage -- everywhere else the caller already knows whose item it is. */
+export interface ReviewQueueEntryDto extends ContentVersionSummaryDto {
+  author: { id: string; displayName: string };
 }
 
 export interface ContentItemDto {

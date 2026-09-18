@@ -12,7 +12,15 @@ const send = async (to: string, subject: string, text: string): Promise<void> =>
     return;
   }
 
-  await transport.sendMail({ from: env.MAIL_FROM, to, subject, text });
+  try {
+    // `text` is deliberately omitted: it carries the verification/reset link,
+    // which is a bearer credential and must not reach a log sink.
+    const info = await transport.sendMail({ from: env.MAIL_FROM, to, subject, text });
+    logger.info({ to, subject, messageId: info.messageId }, "Mail sent (smtp transport)");
+  } catch (error) {
+    logger.error({ err: error, to, subject }, "Mail send failed (smtp transport)");
+    throw error;
+  }
 };
 
 export const sendVerificationEmail = (to: string, token: string): Promise<void> => {

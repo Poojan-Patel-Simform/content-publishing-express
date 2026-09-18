@@ -5,7 +5,11 @@ import { prisma } from "../config/prisma.js";
 import { AuditAction, ReviewDecision, VersionStatus } from "../generated/prisma-client/enums.js";
 import type { ContentVersionModel } from "../generated/prisma-client/models.js";
 import { ConflictError, NotFoundError } from "../errors/http-errors.js";
-import type { ContentVersionSummaryDto, PagedResult } from "../interfaces/content.interface.js";
+import type {
+  ContentVersionSummaryDto,
+  PagedResult,
+  ReviewQueueEntryDto,
+} from "../interfaces/content.interface.js";
 import * as scheduledPublicationQueue from "../queues/scheduled-publication.queue.js";
 import * as contentItemRepository from "../repositories/content-item.repository.js";
 import * as contentVersionRepository from "../repositories/content-version.repository.js";
@@ -23,6 +27,7 @@ interface RequestContext {
 
 const toSummaryDto = (version: ContentVersionModel): ContentVersionSummaryDto => ({
   id: version.id,
+  contentItemId: version.contentItemId,
   versionNumber: version.versionNumber,
   status: version.status,
   title: version.title,
@@ -42,7 +47,7 @@ const requireVersion = async (versionId: string): Promise<ContentVersionModel> =
 export const getQueue = async (query: {
   page: number;
   pageSize: number;
-}): Promise<PagedResult<ContentVersionSummaryDto>> => {
+}): Promise<PagedResult<ReviewQueueEntryDto>> => {
   const { skip, take } = toSkipTake(query);
 
   // Count and page share one transaction so `totalItems` never drifts from
@@ -53,7 +58,11 @@ export const getQueue = async (query: {
   ]);
 
   const meta = buildPageMeta(query, totalItems);
-  return { items: rows.map(toSummaryDto), meta };
+  const items = rows.map(({ createdBy, ...version }) => ({
+    ...toSummaryDto(version),
+    author: createdBy,
+  }));
+  return { items, meta };
 };
 
 export const approve = async (

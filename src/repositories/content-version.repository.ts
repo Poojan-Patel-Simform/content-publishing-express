@@ -100,6 +100,9 @@ export const listPendingReview = (skip: number, take: number) =>
     orderBy: [{ submittedAt: "asc" }, { id: "asc" }],
     skip,
     take,
+    // The queue is triaged without the item in hand, so the author comes along
+    // for the ride -- one join beats N lookups from the client.
+    include: { createdBy: { select: { id: true, displayName: true } } },
   });
 
 export const countPendingReview = () =>
