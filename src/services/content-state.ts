@@ -8,12 +8,7 @@ import { ConflictError } from "../errors/http-errors.js";
  */
 const TRANSITIONS: Record<VersionStatus, VersionStatus[]> = {
   [VersionStatus.DRAFT]: [VersionStatus.PENDING_REVIEW, VersionStatus.DISCARDED],
-  [VersionStatus.PENDING_REVIEW]: [
-    VersionStatus.APPROVED,
-    VersionStatus.REJECTED,
-    VersionStatus.PUBLISHED,
-    VersionStatus.SCHEDULED,
-  ],
+  [VersionStatus.PENDING_REVIEW]: [VersionStatus.APPROVED, VersionStatus.REJECTED],
   [VersionStatus.REJECTED]: [VersionStatus.PENDING_REVIEW],
   [VersionStatus.APPROVED]: [VersionStatus.PUBLISHED, VersionStatus.SCHEDULED],
   [VersionStatus.SCHEDULED]: [VersionStatus.PUBLISHED, VersionStatus.APPROVED],

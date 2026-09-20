@@ -128,9 +128,11 @@ export const reject = async (
 };
 
 /**
- * Publishes straight from the editorial queue (plan.md §9: direct publish
- * from PENDING_REVIEW is allowed and skips the APPROVED stop). The `Review`
- * row and `publishVersion`'s state change commit in one transaction --
+ * Publishes a version that has already cleared review -- APPROVED, or
+ * UNPUBLISHED when re-publishing something that was live before. Approval is
+ * a hard gate: a PENDING_REVIEW version is refused by `assertTransition` with
+ * a 409 before any write. The `Review` row and `publishVersion`'s state
+ * change commit in one transaction --
  * `publishVersion` accepts the same `tx` via `client` rather than opening its
  * own, so a crash between the two can never record a decision without the
  * publish (or vice versa). The future BullMQ worker calls `publishVersion`

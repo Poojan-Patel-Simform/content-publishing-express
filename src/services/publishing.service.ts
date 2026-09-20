@@ -22,6 +22,13 @@ interface PublishContext {
  * trigger is an editor's publish click or the scheduler worker, this function
  * runs unchanged.
  *
+ * A version only becomes eligible here once review has passed: APPROVED (an
+ * editor publishing after approval), SCHEDULED (the worker firing a job that
+ * was itself only bookable from APPROVED), or UNPUBLISHED (re-publishing
+ * something that was already live). PENDING_REVIEW is deliberately absent --
+ * this guard is the SQL-level twin of the transition table in
+ * content-state.ts, and the two must agree.
+ *
  * Step 1's status-guarded `updateMany` is the idempotency hinge: a replay (a
  * stalled job re-picked by another worker, two editors clicking publish at
  * once) affects 0 rows and returns `{ alreadyPublished: true }` without
@@ -39,12 +46,7 @@ export const publishVersion = async (
       where: {
         id: versionId,
         status: {
-          in: [
-            VersionStatus.APPROVED,
-            VersionStatus.PENDING_REVIEW,
-            VersionStatus.SCHEDULED,
-            VersionStatus.UNPUBLISHED,
-          ],
+          in: [VersionStatus.APPROVED, VersionStatus.SCHEDULED, VersionStatus.UNPUBLISHED],
         },
       },
       data: { status: VersionStatus.PUBLISHED, publishedAt },
