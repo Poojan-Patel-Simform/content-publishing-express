@@ -35,13 +35,21 @@ export const create = (tx: Prisma.TransactionClient, input: CreateContentVersion
     },
   });
 
+/** Taxonomy comes back as slugs as well as ids: ids are what the rows store,
+ * but slugs are what the API speaks and what an edit form can round-trip --
+ * there is no endpoint to resolve an id back to a slug. */
+const withTaxonomy = {
+  tags: { include: { tag: { select: { slug: true } } } },
+  category: { select: { slug: true } },
+} as const;
+
 export const findById = (id: string) =>
-  prisma.contentVersion.findUnique({ where: { id }, include: { tags: true } });
+  prisma.contentVersion.findUnique({ where: { id }, include: withTaxonomy });
 
 export const findByIdForItem = (contentItemId: string, id: string) =>
   prisma.contentVersion.findFirst({
     where: { id, contentItemId },
-    include: { tags: true },
+    include: withTaxonomy,
   });
 
 export const findLatestForItem = (contentItemId: string) =>

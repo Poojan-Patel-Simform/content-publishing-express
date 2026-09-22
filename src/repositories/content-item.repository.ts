@@ -1,5 +1,5 @@
 import { prisma } from "../config/prisma.js";
-import type { ItemStatus } from "../generated/prisma-client/enums.js";
+import type { ItemStatus, VersionStatus } from "../generated/prisma-client/enums.js";
 import type * as Prisma from "../generated/prisma-client/internal/prismaNamespace.js";
 import type { AuthorshipScope } from "../interfaces/content.interface.js";
 
@@ -32,7 +32,27 @@ export const findBySlugPublished = (slug: string) =>
 export interface ListItemsFilters {
   authorId?: string;
   status?: ItemStatus;
+  /** Matches on the item's versions instead of the item -- `REJECTED` and the
+   * other in-flight states live on `ContentVersion`, and an item carrying one
+   * still reads `DRAFT`. */
+  versionStatus?: VersionStatus;
 }
+
+/** Shared by the page query and its `COUNT(*)`, so the two can never drift --
+ * a filter applied to only one of them makes `meta.totalItems` lie about the
+ * rows actually returned. */
+const listWhere = (
+  scope: AuthorshipScope,
+  filters: ListItemsFilters,
+): Prisma.ContentItemWhereInput => ({
+  ...scopeWhere(scope),
+  ...(filters.authorId !== undefined ? { authorId: filters.authorId } : {}),
+  ...(filters.status !== undefined ? { status: filters.status } : {}),
+  ...(filters.status !== "ARCHIVED" ? { archivedAt: null } : {}),
+  ...(filters.versionStatus !== undefined
+    ? { versions: { some: { status: filters.versionStatus } } }
+    : {}),
+});
 
 export const listScoped = (
   scope: AuthorshipScope,
@@ -41,26 +61,14 @@ export const listScoped = (
   take: number,
 ) =>
   prisma.contentItem.findMany({
-    where: {
-      ...scopeWhere(scope),
-      ...(filters.authorId !== undefined ? { authorId: filters.authorId } : {}),
-      ...(filters.status !== undefined ? { status: filters.status } : {}),
-      ...(filters.status !== "ARCHIVED" ? { archivedAt: null } : {}),
-    },
+    where: listWhere(scope, filters),
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     skip,
     take,
   });
 
 export const countScoped = (scope: AuthorshipScope, filters: ListItemsFilters) =>
-  prisma.contentItem.count({
-    where: {
-      ...scopeWhere(scope),
-      ...(filters.authorId !== undefined ? { authorId: filters.authorId } : {}),
-      ...(filters.status !== undefined ? { status: filters.status } : {}),
-      ...(filters.status !== "ARCHIVED" ? { archivedAt: null } : {}),
-    },
-  });
+  prisma.contentItem.count({ where: listWhere(scope, filters) });
 
 export interface PublicListFilters {
   categorySlug?: string;

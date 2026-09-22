@@ -25,7 +25,10 @@ interface RequestContext {
 
 /** `findById`/`findByIdForItem` fetch `tags` for the full DTO; every other
  * read of a version is scalar-only and never needs it. */
-type ContentVersionWithTags = ContentVersionModel & { tags: { tagId: string }[] };
+type ContentVersionWithTags = ContentVersionModel & {
+  tags: { tagId: string; tag: { slug: string } }[];
+  category: { slug: string } | null;
+};
 
 const toItemDto = (item: ContentItemModel): ContentItemDto => ({
   id: item.id,
@@ -64,6 +67,11 @@ const toVersionDto = (version: ContentVersionWithTags): ContentVersionDto => ({
   excerpt: version.excerpt,
   categoryId: version.categoryId,
   tagIds: version.tags?.map((t) => t.tagId) ?? [],
+  // The slug twins of the two above. The ids identify the rows; the slugs are
+  // what `PATCH .../versions/:versionId` accepts, so without them an edit form
+  // has no way to show -- let alone resubmit -- the taxonomy it already has.
+  categorySlug: version.category?.slug ?? null,
+  tagSlugs: version.tags?.map((t) => t.tag.slug) ?? [],
   parentVersionId: version.parentVersionId,
   changeSummary: version.changeSummary,
   createdById: version.createdById,
@@ -157,6 +165,7 @@ export interface ListItemsQuery {
   pageSize: number;
   authorId?: string | undefined;
   status?: ListItemsFilters["status"] | undefined;
+  versionStatus?: ListItemsFilters["versionStatus"] | undefined;
 }
 
 export const listMyItems = async (
@@ -166,6 +175,7 @@ export const listMyItems = async (
   const filters: ListItemsFilters = {
     ...(query.authorId !== undefined ? { authorId: query.authorId } : {}),
     ...(query.status !== undefined ? { status: query.status } : {}),
+    ...(query.versionStatus !== undefined ? { versionStatus: query.versionStatus } : {}),
   };
   const { skip, take } = toSkipTake(query);
 
@@ -337,7 +347,8 @@ export const startRevision = async (
     return version;
   });
 
-  return toVersionDto({ ...created, tags: live.tags });
+  const refreshed = await contentVersionRepository.findById(created.id);
+  return toVersionDto(refreshed!);
 };
 
 export const listVersions = async (

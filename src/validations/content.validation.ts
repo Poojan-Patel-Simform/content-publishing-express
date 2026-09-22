@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ItemStatus } from "../generated/prisma-client/enums.js";
+import { ItemStatus, VersionStatus } from "../generated/prisma-client/enums.js";
 
 const title = z.string().trim().min(1).max(200);
 const body = z.string().min(1).max(100_000);
@@ -47,6 +47,10 @@ export const listMyItemsQuerySchema = z.object({
   pageSize,
   authorId: z.uuid().optional(),
   status: z.enum(ItemStatus).optional(),
+  /** Filters on the item's *versions* rather than the item itself -- the only
+   * way to ask for something like "rejected", which is a version state and
+   * leaves the item sitting at `DRAFT`. */
+  versionStatus: z.enum(VersionStatus).optional(),
 });
 
 export const publicListQuerySchema = z.object({

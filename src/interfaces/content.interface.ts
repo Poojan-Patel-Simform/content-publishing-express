@@ -15,6 +15,10 @@ export interface ContentVersionDto {
   excerpt: string | null;
   categoryId: string | null;
   tagIds: string[];
+  /** Slug twins of the two ids above -- what `PATCH .../versions/:versionId`
+   * accepts, and the only way a client can round-trip a version's taxonomy. */
+  categorySlug: string | null;
+  tagSlugs: string[];
   parentVersionId: string | null;
   changeSummary: string | null;
   createdById: string;
