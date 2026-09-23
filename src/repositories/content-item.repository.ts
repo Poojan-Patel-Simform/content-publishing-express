@@ -106,6 +106,7 @@ export const listPublished = (
     orderBy: [{ publishedAt: sort === "newest" ? "desc" : "asc" }, { id: "desc" }],
     skip,
     take,
+    include: { publishedVersion: { select: { excerpt: true } } },
   });
 
 export const countPublished = (filters: PublicListFilters) =>

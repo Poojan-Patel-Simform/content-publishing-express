@@ -42,7 +42,7 @@ export const listPublished = async (
     id: item.id,
     slug: item.slug,
     title: item.publishedTitle!,
-    excerpt: null,
+    excerpt: item.publishedVersion?.excerpt ?? null,
     publishedAt: item.publishedAt!,
   }));
 
