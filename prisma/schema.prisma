@@ -5,9 +5,9 @@
 //   1. ContentItem is the stable entity; ContentVersion is an immutable snapshot.
 //      The item points at exactly one published version, so editing a revision
 //      never touches what the public is reading.
-//   2. ScheduledPublication is a claimable job row. Exactly-once publishing comes
-//      from FOR UPDATE SKIP LOCKED plus status-guarded conditional updates, not
-//      from the worker running only once.
+//   2. ScheduledPublication is the durable record of a scheduled publish; BullMQ
+//      executes it. Exactly-once publishing comes from status-guarded conditional
+//      updates, not from the worker running only once.
 
 generator client {
   provider = "prisma-client"
@@ -73,7 +73,7 @@ enum ReviewDecision {
 
 enum JobStatus {
   PENDING
-  /// Claimed by a worker; lockedBy / lockedAt say which one and since when.
+  /// Reserved; not currently set. BullMQ tracks in-flight state.
   CLAIMED
   SUCCEEDED
   FAILED
@@ -372,21 +372,15 @@ model Review {
 // Scheduled publishing
 // ---------------------------------------------------------------------------
 
-/// A claimable unit of work. At most one live (PENDING/CLAIMED) job may exist
-/// per version — enforced by a partial unique index in the migration, which is
-/// what makes "schedule twice" a database error rather than a double publish.
+/// The durable source of truth for a scheduled publish. At most one live
+/// (PENDING/CLAIMED) job may exist per version — enforced by a partial unique
+/// index in the migration, which is what makes "schedule twice" a database error
+/// rather than a double publish.
 ///
-/// Worker loop:
-///   BEGIN;
-///   SELECT id FROM scheduled_publications
-///     WHERE status = 'PENDING' AND scheduled_for <= now()
-///     ORDER BY scheduled_for
-///     LIMIT $batch
-///     FOR UPDATE SKIP LOCKED;            -- two instances never claim the same row
-///   ... publish ...
-///   UPDATE scheduled_publications SET status = 'SUCCEEDED'
-///     WHERE id = $id AND status = 'PENDING';   -- 0 rows => someone else won, no-op
-///   COMMIT;
+/// Execution lives in BullMQ (jobId = this row's id); the reconciler re-enqueues
+/// PENDING rows Redis has lost. Retries/backoff are BullMQ job options, not
+/// columns here. A double execution is a no-op because publishing.service
+/// completes the row with a status-guarded UPDATE (PENDING -> SUCCEEDED).
 model ScheduledPublication {
   id            String    @id @default(uuid(7))
   contentItemId String
@@ -396,17 +390,8 @@ model ScheduledPublication {
   /// When the item should go live. Indexed with status for the due-items scan.
   scheduledFor DateTime
 
-  /// Worker identity + claim time, so a crashed worker's CLAIMED rows can be
-  /// reclaimed after a lease timeout instead of stalling forever.
-  lockedBy       String?
-  lockedAt       DateTime?
-  leaseExpiresAt DateTime?
-
-  attempts      Int       @default(0)
-  maxAttempts   Int       @default(5)
-  /// Backoff target; the due-scan uses this when set instead of scheduledFor.
-  nextAttemptAt DateTime?
-  lastError     String?
+  /// Set when the job is parked FAILED after BullMQ exhausts its attempts.
+  lastError String?
 
   createdById String?
   createdAt   DateTime  @default(now())
@@ -419,8 +404,6 @@ model ScheduledPublication {
 
   /// The due-items scan. Keeps the 50k-pending-items case an index range scan.
   @@index([status, scheduledFor])
-  /// Reclaiming expired leases.
-  @@index([status, leaseExpiresAt])
   @@index([versionId, status])
   @@index([contentItemId])
   @@map("scheduled_publications")

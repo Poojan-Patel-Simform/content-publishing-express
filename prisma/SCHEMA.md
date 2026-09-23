@@ -84,19 +84,12 @@ At most one live job per version. A duplicate schedule request is a unique viola
 API maps to 409, not a second publish. Terminal rows (`SUCCEEDED`/`FAILED`/`CANCELLED`)
 are excluded so reschedule history accumulates freely.
 
-**(b) `FOR UPDATE SKIP LOCKED` — two instances cannot claim the same row.**
+**(b) BullMQ's job lock — two instances do not run the same job.**
 
-```sql
-BEGIN;
-SELECT id FROM scheduled_publications
-  WHERE status = 'PENDING' AND "scheduledFor" <= now()
-  ORDER BY "scheduledFor"
-  LIMIT $batch
-  FOR UPDATE SKIP LOCKED;
-```
-
-Instance B skips rows instance A has locked rather than blocking on them, so both
-workers make progress on disjoint sets. No external lock service, no leader election.
+The row's id is the BullMQ `jobId`, so enqueueing the same row twice is a no-op in Redis.
+Only one worker holds a job's lock at a time; a stalled worker's job is re-claimed only
+after `lockDuration` elapses. This is a defence, not the guarantee — (c) is what makes a
+double execution harmless regardless of what the queue does.
 
 **(c) Status-guarded conditional update — a replay is a no-op.**
 
@@ -116,11 +109,13 @@ That is the §6 test: run the worker twice, or two workers concurrently, against
 due item and assert one `PUBLISHED` transition, one `SUCCEEDED` job, one `PUBLISHED`
 audit event.
 
-**Crash recovery.** `lockedBy` / `lockedAt` / `leaseExpiresAt` let a sweeper return
-`CLAIMED` rows whose lease expired to `PENDING`. Since (c) makes re-execution a no-op,
-reclaiming an in-flight job that actually succeeded is safe. `attempts` / `maxAttempts` /
-`nextAttemptAt` / `lastError` cap retries and park permanent failures at `FAILED` for a
-human, rather than looping forever.
+**Crash recovery.** The reconciler (`src/jobs/scheduled-publication.reconciler.ts`)
+runs on start and every `SCHEDULER_RECONCILE_INTERVAL_MS`, re-enqueueing any `PENDING`
+row BullMQ has no job for (Redis flush/restart, a swallowed `queue.add` failure). Since
+(c) makes re-execution a no-op, re-enqueueing a job that actually succeeded is safe.
+Retries and backoff are BullMQ job options (`SCHEDULER_MAX_ATTEMPTS`,
+`SCHEDULER_BACKOFF_MS`); once they are exhausted the row is parked `FAILED` with
+`lastError` for a human, so failures are visible from Postgres without reading Redis.
 
 **Scale.** The due scan is a range scan over the partial index
 `(scheduledFor, id) WHERE status = 'PENDING'`, so 50,000 pending future items cost
