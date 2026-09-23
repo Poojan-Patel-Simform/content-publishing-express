@@ -331,6 +331,12 @@ export const startRevision = async (
   if (!live) throw new ConflictError("Published version is missing");
 
   const created = await prisma.$transaction(async (tx) => {
+    // App-level half of the guard: a clean 409 for the common case. Does not
+    // close the race by itself (two transactions can both pass it under READ
+    // COMMITTED) -- the partial unique index is what's airtight.
+    const openDraft = await contentVersionRepository.findOpenDraftForItem(tx, itemId);
+    if (openDraft) throw new ConflictError("Item already has an open draft revision");
+
     const bumped = await contentItemRepository.bumpVersionCounter(tx, itemId);
     const version = await contentVersionRepository.create(tx, {
       contentItemId: itemId,

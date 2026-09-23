@@ -83,6 +83,17 @@ export const findLiveScheduledForItem = (contentItemId: string) =>
     where: { contentItemId, status: "SCHEDULED" },
   });
 
+/** At most one DRAFT/REJECTED version can exist per item (enforced by the DB
+ * partial unique index `content_versions_one_open_draft_per_item`); this is
+ * the pre-check that turns a would-be unique-violation on `startRevision`
+ * into a clean ConflictError instead of a raw Postgres error. Reads through
+ * `tx` so it sees the same snapshot the subsequent INSERT commits into. */
+export const findOpenDraftForItem = (tx: Prisma.TransactionClient, contentItemId: string) =>
+  tx.contentVersion.findFirst({
+    where: { contentItemId, status: { in: ["DRAFT", "REJECTED"] } },
+    select: { id: true },
+  });
+
 export interface UpdateDraftInput {
   title?: string;
   body?: string;

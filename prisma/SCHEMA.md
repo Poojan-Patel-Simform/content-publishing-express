@@ -171,6 +171,7 @@ service layer can forget is not a constraint. The initial migration adds:
 |---|---|
 | `scheduled_publications_one_live_job_per_version` | Double-queueing a version |
 | `scheduled_publications_due_scan` | Full scans on the worker's hot path |
+| `content_versions_one_open_draft_per_item` | Two concurrent `startRevision` calls creating duplicate open drafts for the same item |
 | `reviews_reject_requires_comment` | A rejection with no reason (§3.2) |
 | `reviews_schedule_requires_time` | A `SCHEDULE` decision with no instant |
 | `scheduled_publications_pending_needs_time` | A pending job with no time (§6 bad input) |
