@@ -44,6 +44,11 @@ export const cancel = (tx: Prisma.TransactionClient, id: string) =>
 export const listPending = () =>
   prisma.scheduledPublication.findMany({ where: { status: "PENDING" } });
 
+/** Same filter as `listPending`, for the disabled-scheduler startup warning
+ * that only needs to know whether anything is stranded. */
+export const countPending = () =>
+  prisma.scheduledPublication.count({ where: { status: "PENDING" } });
+
 export const markFailed = (id: string, lastError: string) =>
   prisma.scheduledPublication.updateMany({
     where: { id, status: { in: ["PENDING", "CLAIMED"] } },

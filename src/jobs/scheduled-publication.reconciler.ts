@@ -30,8 +30,29 @@ const runReconcile = async (): Promise<void> => {
   }
 };
 
+/** With the scheduler off nothing will ever fire a `PENDING` row, so say so
+ * loudly at startup rather than let them sit unnoticed (EC-19). Postgres
+ * only -- a disabled scheduler still never touches Redis. */
+const warnIfPendingStranded = async (): Promise<void> => {
+  try {
+    const pending = await scheduledPublicationRepository.countPending();
+    if (pending > 0) {
+      logger.warn(
+        { pending },
+        "SCHEDULER_ENABLED=false: pending scheduled publications will not fire on this instance",
+      );
+    }
+  } catch (err) {
+    logger.error({ err }, "Failed to count pending scheduled publications");
+  }
+};
+
 export const startScheduledPublicationReconciler = (): void => {
-  if (!env.SCHEDULER_ENABLED || interval) return;
+  if (!env.SCHEDULER_ENABLED) {
+    void warnIfPendingStranded();
+    return;
+  }
+  if (interval) return;
 
   void runReconcile();
   interval = setInterval(() => void runReconcile(), env.SCHEDULER_RECONCILE_INTERVAL_MS);

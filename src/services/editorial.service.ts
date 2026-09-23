@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 
+import { env } from "../config/env.js";
 import { logger } from "../config/logger.js";
 import { prisma } from "../config/prisma.js";
 import { AuditAction, ReviewDecision, VersionStatus } from "../generated/prisma-client/enums.js";
 import type { ContentVersionModel } from "../generated/prisma-client/models.js";
-import { ConflictError, NotFoundError } from "../errors/http-errors.js";
+import { ConflictError, NotFoundError, ServiceUnavailableError } from "../errors/http-errors.js";
 import type {
   ContentVersionSummaryDto,
   PagedResult,
@@ -189,6 +190,12 @@ export const schedule = async (
   input: { scheduledFor: Date },
   ctx: RequestContext,
 ): Promise<ContentVersionSummaryDto> => {
+  // With the worker and reconciler off, a committed PENDING row would never
+  // fire -- refuse up front instead of stranding it (EC-19).
+  if (!env.SCHEDULER_ENABLED) {
+    throw new ServiceUnavailableError("Scheduled publishing is disabled");
+  }
+
   const version = await requireVersionWithItem(versionId);
   assertTransition(version.status, VersionStatus.SCHEDULED);
 
