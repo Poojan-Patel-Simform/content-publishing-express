@@ -39,6 +39,8 @@ const toSummaryDto = (version: ContentVersionModel): ContentVersionSummaryDto =>
   publishedAt: version.publishedAt,
 });
 
+const NOT_SCHEDULED = "Version is not scheduled";
+
 const requireVersion = async (versionId: string): Promise<ContentVersionModel> => {
   const version = await contentVersionRepository.findById(versionId);
   if (!version) throw new NotFoundError("Version not found");
@@ -241,21 +243,23 @@ export const schedule = async (
 export const cancelSchedule = async (versionId: string, ctx: RequestContext): Promise<void> => {
   const version = await requireVersion(versionId);
   if (version.status !== VersionStatus.SCHEDULED) {
-    throw new ConflictError("Version is not scheduled");
+    throw new ConflictError(NOT_SCHEDULED);
   }
 
-  assertTransition(version.status, VersionStatus.APPROVED);
-
-  const cancelled = await prisma.$transaction((tx) =>
-    scheduleCancellationService.cancelLiveScheduleInTx(
+  const cancelled = await prisma.$transaction(async (tx) => {
+    const result = await scheduleCancellationService.cancelLiveScheduleInTx(
       tx,
       versionId,
       version.contentItemId,
       ctx.actorId,
       ctx.requestId,
-    ),
-  );
-  if (!cancelled) throw new NotFoundError("No pending schedule for this version");
+    );
+    // null => the worker claimed/published (or another cancel won) after our
+    // read -- the same condition as the check above, so the same 409. Throwing
+    // inside the tx also rolls back a version flip whose job cancel lost.
+    if (!result) throw new ConflictError(NOT_SCHEDULED);
+    return result;
+  });
 
   await scheduleCancellationService.removeCancelledScheduleJob(cancelled, versionId);
 };
