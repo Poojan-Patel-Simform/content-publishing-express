@@ -167,6 +167,7 @@ export interface ListItemsQuery {
   authorId?: string | undefined;
   status?: ListItemsFilters["status"] | undefined;
   versionStatus?: ListItemsFilters["versionStatus"] | undefined;
+  includeArchived?: boolean | undefined;
 }
 
 export const listMyItems = async (
@@ -177,12 +178,15 @@ export const listMyItems = async (
     ...(query.authorId !== undefined ? { authorId: query.authorId } : {}),
     ...(query.status !== undefined ? { status: query.status } : {}),
     ...(query.versionStatus !== undefined ? { versionStatus: query.versionStatus } : {}),
+    ...(query.includeArchived !== undefined ? { includeArchived: query.includeArchived } : {}),
   };
   const { skip, take } = toSkipTake(query);
 
   const totalItems = await contentItemRepository.countScoped(scope, filters);
   const meta = buildPageMeta(query, totalItems);
-  if (query.page > meta.totalPages) throw new ValidationError("page is beyond the last page");
+  // Past the last page is an empty page, not an error -- and there is no
+  // point paying for an offset scan that can only come back empty.
+  if (query.page > meta.totalPages) return { items: [], meta };
 
   const rows = await contentItemRepository.listScoped(scope, filters, skip, take);
   return { items: rows.map(toItemDto), meta };

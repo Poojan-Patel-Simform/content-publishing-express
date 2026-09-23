@@ -1,5 +1,5 @@
 import { prisma } from "../config/prisma.js";
-import { NotFoundError, ValidationError } from "../errors/http-errors.js";
+import { NotFoundError } from "../errors/http-errors.js";
 import type {
   PagedResult,
   PublicContentDetailDto,
@@ -35,8 +35,8 @@ export const listPublished = async (
     contentItemRepository.listPublished(filters, query.sort, skip, take),
   ]);
 
+  // A page past the end simply comes back with no rows.
   const meta = buildPageMeta(query, totalItems);
-  if (query.page > meta.totalPages) throw new ValidationError("page is beyond the last page");
 
   const items: PublicContentListItemDto[] = rows.map((item) => ({
     id: item.id,

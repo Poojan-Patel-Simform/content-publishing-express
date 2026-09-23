@@ -36,6 +36,9 @@ export interface ListItemsFilters {
    * other in-flight states live on `ContentVersion`, and an item carrying one
    * still reads `DRAFT`. */
   versionStatus?: VersionStatus;
+  /** Drops the default `archivedAt: null` guard, so archived items come back
+   * alongside every other status instead of only via `status: "ARCHIVED"`. */
+  includeArchived?: boolean;
 }
 
 /** Shared by the page query and its `COUNT(*)`, so the two can never drift --
@@ -48,7 +51,7 @@ const listWhere = (
   ...scopeWhere(scope),
   ...(filters.authorId !== undefined ? { authorId: filters.authorId } : {}),
   ...(filters.status !== undefined ? { status: filters.status } : {}),
-  ...(filters.status !== "ARCHIVED" ? { archivedAt: null } : {}),
+  ...(filters.status !== "ARCHIVED" && !filters.includeArchived ? { archivedAt: null } : {}),
   ...(filters.versionStatus !== undefined
     ? { versions: { some: { status: filters.versionStatus } } }
     : {}),

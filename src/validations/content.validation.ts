@@ -51,6 +51,9 @@ export const listMyItemsQuerySchema = z.object({
    * way to ask for something like "rejected", which is a version state and
    * leaves the item sitting at `DRAFT`. */
   versionStatus: z.enum(VersionStatus).optional(),
+  /** Archived items are hidden unless asked for; `true` returns them
+   * alongside every other status. */
+  includeArchived: z.stringbool().default(false),
 });
 
 export const publicListQuerySchema = z.object({
