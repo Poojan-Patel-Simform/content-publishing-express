@@ -7,13 +7,18 @@ declare global {
   var prismaClient: PrismaClient | undefined;
 }
 
-// DATABASE_URL now points at Neon's direct (unpooled) endpoint, with pooling
-// handled by Neon's own connection pooler server-side. The local pg pool can
-// afford more headroom than before since it's no longer stacked on top of a
-// second, shared remote pooler.
+// DATABASE_URL points at Neon's pooled (`-pooler`, PgBouncer transaction-mode)
+// endpoint; interactive transactions still work since each one pins a single
+// server connection for its lifetime.
+//
+// Connections are kept idle for a minute (pg's default is 10s) so bursts of
+// scheduled publishes reuse warm sockets instead of each paying for a fresh
+// TLS + SCRAM handshake -- or a Neon cold start after auto-suspend.
 const adapter = new PrismaPg({
   connectionString: env.DATABASE_URL,
   max: 10,
+  idleTimeoutMillis: 60_000,
+  connectionTimeoutMillis: 10_000,
 });
 
 export const prisma =
@@ -21,7 +26,8 @@ export const prisma =
   new PrismaClient({
     adapter,
     transactionOptions: {
-      maxWait: 5000,
+      // Covers acquiring a connection, which can include a Neon cold start.
+      maxWait: 15000,
       timeout: 10000,
     },
   });

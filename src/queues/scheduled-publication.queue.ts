@@ -14,7 +14,7 @@ let queue: Queue<PublishJobData> | undefined;
 
 /** Constructed on first use, never at import time, so a disabled scheduler
  * never opens a Redis connection (see `getRedisConnection`). */
-const getQueue = (): Queue<PublishJobData> => {
+export const getQueue = (): Queue<PublishJobData> => {
   queue ??= new Queue<PublishJobData>(SCHEDULED_PUBLICATION_QUEUE_NAME, {
     connection: getRedisConnection(),
   });

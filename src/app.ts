@@ -2,6 +2,7 @@ import cookieParser from "cookie-parser";
 import express, { type Express } from "express";
 import { pinoHttp } from "pino-http";
 
+import { BULL_BOARD_PATH, createBullBoardRouter } from "./admin/bull-board.js";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { corsMiddleware } from "./middlewares/cors.js";
@@ -36,6 +37,19 @@ export const createApp = (): Express => {
       },
     }),
   );
+
+  // Ahead of the global headers, rate limiter and CSRF guard: the board needs
+  // a looser CSP, polls too often for the global limit, and brings its own
+  // auth and same-origin guard (see admin/bull-board.ts).
+  if (env.BULL_BOARD_ENABLED) {
+    if (env.SCHEDULER_ENABLED) {
+      app.use(BULL_BOARD_PATH, createBullBoardRouter());
+    } else {
+      logger.warn(
+        "BULL_BOARD_ENABLED is set but SCHEDULER_ENABLED is false; not mounting Bull Board",
+      );
+    }
+  }
 
   app.use(securityHeaders);
   app.use(corsMiddleware);

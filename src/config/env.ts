@@ -89,6 +89,8 @@ const envSchema = z
     SCHEDULER_MAX_ATTEMPTS: z.coerce.number().int().positive(),
     SCHEDULER_BACKOFF_MS: z.coerce.number().int().positive(),
     SCHEDULER_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive(),
+    // Editor-only dashboard at /admin/queues. Ignored unless SCHEDULER_ENABLED.
+    BULL_BOARD_ENABLED: z.stringbool(),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production") {
