@@ -46,6 +46,12 @@ const withTaxonomy = {
 export const findById = (id: string) =>
   prisma.contentVersion.findUnique({ where: { id }, include: withTaxonomy });
 
+export const findByIdWithItem = (id: string) =>
+  prisma.contentVersion.findUnique({
+    where: { id },
+    include: { item: { select: { id: true, status: true, archivedAt: true } } },
+  });
+
 export const findByIdForItem = (contentItemId: string, id: string) =>
   prisma.contentVersion.findFirst({
     where: { id, contentItemId },

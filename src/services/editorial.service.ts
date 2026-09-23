@@ -45,6 +45,19 @@ const requireVersion = async (versionId: string): Promise<ContentVersionModel> =
   return version;
 };
 
+// Used by transitions that must not touch an archived item (EC-4): approve,
+// reject, publish, schedule. cancelSchedule is deliberately exempt -- it only
+// moves a version away from being publishable, so it shouldn't be blocked by
+// the same archived state it helps clean up.
+const requireVersionWithItem = async (versionId: string) => {
+  const version = await contentVersionRepository.findByIdWithItem(versionId);
+  if (!version) throw new NotFoundError("Version not found");
+  if (version.item.archivedAt) {
+    throw new ConflictError("Item is archived; version cannot be transitioned");
+  }
+  return version;
+};
+
 export const getQueue = async (query: {
   page: number;
   pageSize: number;
@@ -71,7 +84,7 @@ export const approve = async (
   input: { comment?: string | undefined },
   ctx: RequestContext,
 ): Promise<ContentVersionSummaryDto> => {
-  const version = await requireVersion(versionId);
+  const version = await requireVersionWithItem(versionId);
   assertTransition(version.status, VersionStatus.APPROVED);
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -102,7 +115,7 @@ export const reject = async (
   input: { comment: string },
   ctx: RequestContext,
 ): Promise<ContentVersionSummaryDto> => {
-  const version = await requireVersion(versionId);
+  const version = await requireVersionWithItem(versionId);
   assertTransition(version.status, VersionStatus.REJECTED);
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -144,7 +157,7 @@ export const publish = async (
   input: { comment?: string | undefined },
   ctx: RequestContext,
 ): Promise<ContentVersionSummaryDto> => {
-  const version = await requireVersion(versionId);
+  const version = await requireVersionWithItem(versionId);
   assertTransition(version.status, VersionStatus.PUBLISHED);
 
   await prisma.$transaction(async (tx) => {
@@ -172,7 +185,7 @@ export const schedule = async (
   input: { scheduledFor: Date },
   ctx: RequestContext,
 ): Promise<ContentVersionSummaryDto> => {
-  const version = await requireVersion(versionId);
+  const version = await requireVersionWithItem(versionId);
   assertTransition(version.status, VersionStatus.SCHEDULED);
 
   // Caller-supplied id doubles as the BullMQ job id (plan.md §5).

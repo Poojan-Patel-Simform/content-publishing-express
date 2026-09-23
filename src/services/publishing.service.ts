@@ -102,7 +102,9 @@ export const unpublish = async (
 ): Promise<void> => {
   const item = await prisma.contentItem.findUnique({ where: { id: itemId } });
   if (!item) throw new NotFoundError("Content item not found");
-  if (item.status !== "PUBLISHED" || !item.publishedVersionId) {
+  // ARCHIVED is accepted too (EC-5): an item archived while PUBLISHED must
+  // still be unpublishable, but doing so must not un-archive it.
+  if (!item.publishedVersionId || (item.status !== "PUBLISHED" && item.status !== "ARCHIVED")) {
     throw new ConflictError("Item has no published version to unpublish");
   }
 
@@ -114,8 +116,12 @@ export const unpublish = async (
     const unpublishedAt = new Date();
 
     const guarded = await tx.contentItem.updateMany({
-      where: { id: itemId, status: "PUBLISHED" },
-      data: { status: "UNPUBLISHED", publishedVersionId: null, unpublishedAt },
+      where: { id: itemId, status: item.status, publishedVersionId: versionId },
+      data: {
+        status: item.status === "ARCHIVED" ? "ARCHIVED" : "UNPUBLISHED",
+        publishedVersionId: null,
+        unpublishedAt,
+      },
     });
     if (guarded.count === 0) throw new ConflictError("Item has no published version to unpublish");
 
