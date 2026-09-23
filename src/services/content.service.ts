@@ -313,9 +313,20 @@ export const startRevision = async (
   ctx: RequestContext,
 ): Promise<ContentVersionDto> => {
   const item = await requireOwnedItem(itemId, scope);
-  if (!item.publishedVersionId) throw new ConflictError("Item has no published version to revise");
 
-  const live = await contentVersionRepository.findById(item.publishedVersionId);
+  const baseVersionId =
+    item.publishedVersionId ??
+    (item.status === "UNPUBLISHED"
+      ? (
+          await contentVersionRepository.findLatestByStatusForItem(
+            itemId,
+            VersionStatus.UNPUBLISHED,
+          )
+        )?.id
+      : undefined);
+  if (!baseVersionId) throw new ConflictError("Item has no published version to revise");
+
+  const live = await contentVersionRepository.findById(baseVersionId);
   if (!live) throw new ConflictError("Published version is missing");
 
   const created = await prisma.$transaction(async (tx) => {

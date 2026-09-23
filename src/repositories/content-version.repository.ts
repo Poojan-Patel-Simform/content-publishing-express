@@ -64,6 +64,12 @@ export const findLatestForItem = (contentItemId: string) =>
     orderBy: { versionNumber: "desc" },
   });
 
+export const findLatestByStatusForItem = (contentItemId: string, status: VersionStatus) =>
+  prisma.contentVersion.findFirst({
+    where: { contentItemId, status },
+    orderBy: { versionNumber: "desc" },
+  });
+
 export const listForItem = (contentItemId: string) =>
   prisma.contentVersion.findMany({
     where: { contentItemId },
