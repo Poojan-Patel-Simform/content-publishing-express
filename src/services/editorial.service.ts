@@ -19,6 +19,7 @@ import { buildPageMeta, toSkipTake } from "../utils/pagination.js";
 import * as auditService from "./audit.service.js";
 import { assertTransition } from "./content-state.js";
 import * as publishingService from "./publishing.service.js";
+import * as scheduleCancellationService from "./schedule-cancellation.service.js";
 
 interface RequestContext {
   actorId: string;
@@ -226,35 +227,21 @@ export const cancelSchedule = async (versionId: string, ctx: RequestContext): Pr
   if (version.status !== VersionStatus.SCHEDULED) {
     throw new ConflictError("Version is not scheduled");
   }
-  const job = await scheduledPublicationRepository.findLiveForVersion(versionId);
-  if (!job) throw new NotFoundError("No pending schedule for this version");
 
   assertTransition(version.status, VersionStatus.APPROVED);
 
-  await prisma.$transaction(async (tx) => {
-    await contentVersionRepository.updateStatus(tx, versionId, {
-      status: VersionStatus.APPROVED,
-      scheduledPublishAt: null,
-    });
-    const cancelled = await scheduledPublicationRepository.cancel(tx, job.id);
-    if (cancelled.count === 0) throw new ConflictError("Schedule was already claimed or resolved");
-
-    await auditService.recordAuditEvent(
-      AuditAction.SCHEDULE_CANCELLED,
+  const cancelled = await prisma.$transaction((tx) =>
+    scheduleCancellationService.cancelLiveScheduleInTx(
+      tx,
+      versionId,
+      version.contentItemId,
       ctx.actorId,
       ctx.requestId,
-      { contentItemId: version.contentItemId, versionId, client: tx },
-    );
-  });
+    ),
+  );
+  if (!cancelled) throw new NotFoundError("No pending schedule for this version");
 
-  // Best-effort, same reasoning as the enqueue above: a race with the worker
-  // having already claimed the job is fine, publishVersion's status guard
-  // is the real defence against a cancelled item going live.
-  try {
-    await scheduledPublicationQueue.removeQueuedPublish(job.id);
-  } catch (err) {
-    logger.warn({ err, jobId: job.id, versionId }, "Failed to remove queued publish job");
-  }
+  await scheduleCancellationService.removeCancelledScheduleJob(cancelled, versionId);
 };
 
 export const unpublish = async (itemId: string, ctx: RequestContext): Promise<void> => {

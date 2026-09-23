@@ -48,6 +48,7 @@ export const publishVersion = async (
         status: {
           in: [VersionStatus.APPROVED, VersionStatus.SCHEDULED, VersionStatus.UNPUBLISHED],
         },
+        item: { archivedAt: null },
       },
       data: { status: VersionStatus.PUBLISHED, publishedAt },
     });

@@ -64,6 +64,13 @@ export const listForItem = (contentItemId: string) =>
     orderBy: { versionNumber: "desc" },
   });
 
+/** At most one version can be SCHEDULED per item in practice (the review
+ * pipeline only ever advances one version at a time), so findFirst is safe. */
+export const findLiveScheduledForItem = (contentItemId: string) =>
+  prisma.contentVersion.findFirst({
+    where: { contentItemId, status: "SCHEDULED" },
+  });
+
 export interface UpdateDraftInput {
   title?: string;
   body?: string;

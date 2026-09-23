@@ -18,6 +18,7 @@ import { buildPageMeta, toSkipTake } from "../utils/pagination.js";
 import { slugify, withUniquenessSuffix } from "../utils/slug.js";
 import * as auditService from "./audit.service.js";
 import { assertEditable, assertTransition } from "./content-state.js";
+import * as scheduleCancellationService from "./schedule-cancellation.service.js";
 
 interface RequestContext {
   requestId: string;
@@ -388,16 +389,34 @@ export const archiveItem = async (
     throw new ConflictError("A published item can only be archived by an editor");
   }
 
-  await prisma.$transaction(async (tx) => {
+  const actorId = scope.role === "AUTHOR" ? scope.userId : null;
+  const scheduled = await contentVersionRepository.findLiveScheduledForItem(id);
+
+  const cancelled = await prisma.$transaction(async (tx) => {
     await tx.contentItem.update({
       where: { id },
       data: { status: "ARCHIVED", archivedAt: new Date() },
     });
-    await auditService.recordAuditEvent(
-      AuditAction.ITEM_ARCHIVED,
-      scope.role === "AUTHOR" ? scope.userId : null,
-      ctx.requestId,
-      { contentItemId: id, client: tx },
-    );
+
+    const result = scheduled
+      ? await scheduleCancellationService.cancelLiveScheduleInTx(
+          tx,
+          scheduled.id,
+          id,
+          actorId,
+          ctx.requestId,
+        )
+      : null;
+
+    await auditService.recordAuditEvent(AuditAction.ITEM_ARCHIVED, actorId, ctx.requestId, {
+      contentItemId: id,
+      client: tx,
+    });
+
+    return result;
   });
+
+  if (scheduled) {
+    await scheduleCancellationService.removeCancelledScheduleJob(cancelled, scheduled.id);
+  }
 };
