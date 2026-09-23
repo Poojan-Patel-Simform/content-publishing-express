@@ -88,10 +88,11 @@ export const approve = async (
   assertTransition(version.status, VersionStatus.APPROVED);
 
   const updated = await prisma.$transaction(async (tx) => {
-    const next = await contentVersionRepository.updateStatus(tx, versionId, {
+    const guarded = await contentVersionRepository.updateStatus(tx, versionId, version.status, {
       status: VersionStatus.APPROVED,
       reviewedAt: new Date(),
     });
+    if (guarded.count === 0) throw new ConflictError("Version was transitioned concurrently");
     await reviewRepository.create(tx, {
       contentItemId: version.contentItemId,
       versionId,
@@ -104,7 +105,7 @@ export const approve = async (
       versionId,
       client: tx,
     });
-    return next;
+    return tx.contentVersion.findUniqueOrThrow({ where: { id: versionId } });
   });
 
   return toSummaryDto(updated);
@@ -119,10 +120,11 @@ export const reject = async (
   assertTransition(version.status, VersionStatus.REJECTED);
 
   const updated = await prisma.$transaction(async (tx) => {
-    const next = await contentVersionRepository.updateStatus(tx, versionId, {
+    const guarded = await contentVersionRepository.updateStatus(tx, versionId, version.status, {
       status: VersionStatus.REJECTED,
       reviewedAt: new Date(),
     });
+    if (guarded.count === 0) throw new ConflictError("Version was transitioned concurrently");
     await reviewRepository.create(tx, {
       contentItemId: version.contentItemId,
       versionId,
@@ -135,7 +137,7 @@ export const reject = async (
       versionId,
       client: tx,
     });
-    return next;
+    return tx.contentVersion.findUniqueOrThrow({ where: { id: versionId } });
   });
 
   return toSummaryDto(updated);
@@ -192,10 +194,11 @@ export const schedule = async (
   const jobId = randomUUID();
 
   const updated = await prisma.$transaction(async (tx) => {
-    const next = await contentVersionRepository.updateStatus(tx, versionId, {
+    const guarded = await contentVersionRepository.updateStatus(tx, versionId, version.status, {
       status: VersionStatus.SCHEDULED,
       scheduledPublishAt: input.scheduledFor,
     });
+    if (guarded.count === 0) throw new ConflictError("Version was transitioned concurrently");
     await scheduledPublicationRepository.create(tx, {
       id: jobId,
       contentItemId: version.contentItemId,
@@ -216,7 +219,7 @@ export const schedule = async (
       metadata: { jobId, scheduledFor: input.scheduledFor.toISOString() },
       client: tx,
     });
-    return next;
+    return tx.contentVersion.findUniqueOrThrow({ where: { id: versionId } });
   });
 
   // Redis/BullMQ are not in the transaction above -- if this throws (Redis

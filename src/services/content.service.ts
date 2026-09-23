@@ -290,10 +290,11 @@ export const submitVersion = async (
   assertTransition(version.status, VersionStatus.PENDING_REVIEW);
 
   await prisma.$transaction(async (tx) => {
-    await contentVersionRepository.updateStatus(tx, version.id, {
+    const guarded = await contentVersionRepository.updateStatus(tx, version.id, version.status, {
       status: VersionStatus.PENDING_REVIEW,
       submittedAt: new Date(),
     });
+    if (guarded.count === 0) throw new ConflictError("Version was transitioned concurrently");
     await auditService.recordAuditEvent(
       AuditAction.SUBMITTED_FOR_REVIEW,
       scope.role === "AUTHOR" ? scope.userId : null,

@@ -116,8 +116,13 @@ export const replaceTags = (tx: Prisma.TransactionClient, versionId: string, tag
 export const updateStatus = (
   tx: Prisma.TransactionClient,
   id: string,
+  fromStatus: VersionStatus,
   data: Prisma.ContentVersionUpdateInput,
-) => tx.contentVersion.update({ where: { id }, data });
+) =>
+  tx.contentVersion.updateMany({
+    where: { id, status: fromStatus },
+    data,
+  });
 
 /** Editor review queue: `WHERE status = 'PENDING_REVIEW' ORDER BY submittedAt
  * ASC` -- served by the `(status, submittedAt)` index (prisma/schema.prisma). */

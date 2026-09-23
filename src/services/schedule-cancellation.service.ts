@@ -32,10 +32,16 @@ export const cancelLiveScheduleInTx = async (
   const job = await scheduledPublicationRepository.findLiveForVersion(versionId);
   if (!job) return null;
 
-  await contentVersionRepository.updateStatus(tx, versionId, {
-    status: VersionStatus.APPROVED,
-    scheduledPublishAt: null,
-  });
+  const guarded = await contentVersionRepository.updateStatus(
+    tx,
+    versionId,
+    VersionStatus.SCHEDULED,
+    {
+      status: VersionStatus.APPROVED,
+      scheduledPublishAt: null,
+    },
+  );
+  if (guarded.count === 0) return null;
 
   const cancelled = await scheduledPublicationRepository.cancel(tx, job.id);
   if (cancelled.count === 0) return null;
