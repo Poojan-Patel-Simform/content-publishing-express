@@ -18,6 +18,15 @@ export const findByEmail = (email: string) => prisma.user.findUnique({ where: { 
 
 export const findById = (id: string) => prisma.user.findUnique({ where: { id } });
 
+/** Id + displayName only -- backs the editor-facing author picker, never a
+ * full `AuthUser`. */
+export const listByRole = (role: UserRole) =>
+  prisma.user.findMany({
+    where: { role },
+    select: { id: true, displayName: true },
+    orderBy: { displayName: "asc" },
+  });
+
 export const create = (input: CreateUserInput) =>
   prisma.user.create({
     data: {

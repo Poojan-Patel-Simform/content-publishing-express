@@ -120,21 +120,19 @@ enum TokenPurpose {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String     @id @default(uuid(7))
-  email        String     @unique
-  /// Argon2id hash. Null for accounts that only ever signed in via an OAuth
-  /// provider. Never selected into any API response.
-  passwordHash String?
-  displayName  String
-  role         UserRole   @default(AUTHOR)
-  status       UserStatus @default(ACTIVE)
+  id              String     @id @default(uuid(7))
+  email           String     @unique
+  passwordHash    String?
+  displayName     String
+  role            UserRole   @default(AUTHOR)
+  status          UserStatus @default(ACTIVE)
   emailVerifiedAt DateTime?
   avatarUrl       String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
-  ownedItems         ContentItem[]        @relation("ItemAuthor")
-  authoredVersions   ContentVersion[]     @relation("VersionAuthor")
+  ownedItems         ContentItem[]       @relation("ItemAuthor")
+  authoredVersions   ContentVersion[]    @relation("VersionAuthor")
   reviews            Review[]
   auditEvents        AuditEvent[]
   sessions           Session[]
@@ -435,4 +433,3 @@ model AuditEvent {
   @@index([action, createdAt(sort: Desc)])
   @@map("audit_events")
 }
-

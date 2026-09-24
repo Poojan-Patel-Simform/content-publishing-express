@@ -7,6 +7,7 @@ import { AuditAction, ReviewDecision, VersionStatus } from "../generated/prisma-
 import type { ContentVersionModel } from "../generated/prisma-client/models.js";
 import { ConflictError, NotFoundError, ServiceUnavailableError } from "../errors/http-errors.js";
 import type {
+  AuthorSummaryDto,
   ContentVersionSummaryDto,
   PagedResult,
   ReviewQueueEntryDto,
@@ -15,6 +16,7 @@ import * as scheduledPublicationQueue from "../queues/scheduled-publication.queu
 import * as contentItemRepository from "../repositories/content-item.repository.js";
 import * as contentVersionRepository from "../repositories/content-version.repository.js";
 import * as reviewRepository from "../repositories/review.repository.js";
+import * as userRepository from "../repositories/user.repository.js";
 import * as scheduledPublicationRepository from "../repositories/scheduled-publication.repository.js";
 import { buildPageMeta, toSkipTake } from "../utils/pagination.js";
 import * as auditService from "./audit.service.js";
@@ -80,6 +82,12 @@ export const getQueue = async (query: {
     author: createdBy,
   }));
   return { items, meta };
+};
+
+/** Backs the "Authors' content" filter -- editors pick a name instead of
+ * pasting an id they have no way to know. */
+export const listAuthors = async (): Promise<AuthorSummaryDto[]> => {
+  return userRepository.listByRole("AUTHOR");
 };
 
 export const approve = async (

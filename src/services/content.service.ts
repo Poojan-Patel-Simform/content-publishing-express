@@ -31,10 +31,18 @@ type ContentVersionWithTags = ContentVersionModel & {
   category: { slug: string } | null;
 };
 
-const toItemDto = (item: ContentItemModel): ContentItemDto => ({
+/** Every scoped item read joins `author` (see content-item.repository.ts's
+ * `withAuthor`), so this is the shape `toItemDto` and its callers actually
+ * work with -- never the bare `ContentItemModel`. */
+type ContentItemWithAuthor = ContentItemModel & {
+  author: { id: string; displayName: string };
+};
+
+const toItemDto = (item: ContentItemWithAuthor): ContentItemDto => ({
   id: item.id,
   slug: item.slug,
   authorId: item.authorId,
+  author: item.author,
   status: item.status,
   publishedVersionId: item.publishedVersionId,
   publishedTitle: item.publishedTitle,
@@ -192,7 +200,10 @@ export const listMyItems = async (
   return { items: rows.map(toItemDto), meta };
 };
 
-const requireOwnedItem = async (id: string, scope: AuthorshipScope): Promise<ContentItemModel> => {
+const requireOwnedItem = async (
+  id: string,
+  scope: AuthorshipScope,
+): Promise<ContentItemWithAuthor> => {
   const item = await contentItemRepository.findByIdScoped(id, scope);
   if (!item) throw new NotFoundError("Content item not found");
   return item;
@@ -202,7 +213,7 @@ const requireOwnedVersion = async (
   itemId: string,
   versionId: string,
   scope: AuthorshipScope,
-): Promise<{ item: ContentItemModel; version: ContentVersionWithTags }> => {
+): Promise<{ item: ContentItemWithAuthor; version: ContentVersionWithTags }> => {
   const item = await requireOwnedItem(itemId, scope);
   const version = await contentVersionRepository.findByIdForItem(itemId, versionId);
   if (!version) throw new NotFoundError("Version not found");

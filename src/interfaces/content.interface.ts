@@ -51,10 +51,18 @@ export interface ReviewQueueEntryDto extends ContentVersionSummaryDto {
   author: { id: string; displayName: string };
 }
 
+/** `GET /editorial/authors` -- the editor-facing author picker (used to
+ * filter items by author without needing to know their id). */
+export interface AuthorSummaryDto {
+  id: string;
+  displayName: string;
+}
+
 export interface ContentItemDto {
   id: string;
   slug: string;
   authorId: string;
+  author: { id: string; displayName: string };
   status: ItemStatus;
   publishedVersionId: string | null;
   publishedTitle: string | null;

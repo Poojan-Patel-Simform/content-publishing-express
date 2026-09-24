@@ -26,6 +26,11 @@ export const getQueue = asyncHandler(async (req, res) => {
   sendSuccess(res, result);
 });
 
+export const listAuthors = asyncHandler(async (_req, res) => {
+  const authors = await editorialService.listAuthors();
+  sendSuccess(res, { authors });
+});
+
 export const approve = asyncHandler(async (req, res) => {
   const { versionId } = req.params as unknown as z.infer<typeof versionIdParamsSchema>;
   const body = req.body as z.infer<typeof approveSchema>;

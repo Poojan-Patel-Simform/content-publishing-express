@@ -21,6 +21,7 @@ editorialRouter.get(
   validate({ query: editorialQueueQuerySchema }),
   editorialController.getQueue,
 );
+editorialRouter.get("/authors", editorialController.listAuthors);
 editorialRouter.post(
   "/versions/:versionId/approve",
   validate({ params: versionIdParamsSchema, body: approveSchema }),

@@ -9,6 +9,14 @@ import type { AuthorshipScope } from "../interfaces/content.interface.js";
 const scopeWhere = (scope: AuthorshipScope): Prisma.ContentItemWhereInput =>
   scope.role === "EDITOR" ? {} : { authorId: scope.userId };
 
+/** Joined onto every scoped read so a row's author is never a bare id --
+ * `GET /editorial/queue` already does this for versions (see
+ * content-version.repository.ts), and items need the same for the author
+ * filter and item detail to show a name instead of a UUID. */
+const withAuthor = {
+  author: { select: { id: true, displayName: true } },
+} as const;
+
 export interface CreateContentItemInput {
   slug: string;
   authorId: string;
@@ -18,7 +26,7 @@ export const create = (tx: Prisma.TransactionClient, input: CreateContentItemInp
   tx.contentItem.create({ data: { slug: input.slug, authorId: input.authorId } });
 
 export const findByIdScoped = (id: string, scope: AuthorshipScope) =>
-  prisma.contentItem.findFirst({ where: { id, ...scopeWhere(scope) } });
+  prisma.contentItem.findFirst({ where: { id, ...scopeWhere(scope) }, include: withAuthor });
 
 export const findBySlugExists = (slug: string) =>
   prisma.contentItem.findUnique({ where: { slug } });
@@ -68,6 +76,7 @@ export const listScoped = (
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     skip,
     take,
+    include: withAuthor,
   });
 
 export const countScoped = (scope: AuthorshipScope, filters: ListItemsFilters) =>
@@ -119,4 +128,5 @@ export const bumpVersionCounter = (tx: Prisma.TransactionClient, id: string) =>
   tx.contentItem.update({
     where: { id },
     data: { versionCounter: { increment: 1 } },
+    include: withAuthor,
   });
