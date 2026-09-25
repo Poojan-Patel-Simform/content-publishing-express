@@ -85,13 +85,13 @@ export const countScoped = (scope: AuthorshipScope, filters: ListItemsFilters) =
 export interface PublicListFilters {
   categorySlug?: string;
   tagSlug?: string;
-  titlePrefix?: string;
+  titleSearch?: string;
 }
 
 const publicWhere = (filters: PublicListFilters): Prisma.ContentItemWhereInput => ({
   status: "PUBLISHED",
-  ...(filters.titlePrefix !== undefined
-    ? { publishedTitle: { startsWith: filters.titlePrefix, mode: "insensitive" } }
+  ...(filters.titleSearch !== undefined
+    ? { publishedTitle: { contains: filters.titleSearch, mode: "insensitive" } }
     : {}),
   ...(filters.categorySlug !== undefined || filters.tagSlug !== undefined
     ? {

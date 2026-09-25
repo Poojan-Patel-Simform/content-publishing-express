@@ -24,7 +24,7 @@ export const listPublished = async (
   const filters: PublicListFilters = {
     ...(query.categorySlug !== undefined ? { categorySlug: query.categorySlug } : {}),
     ...(query.tagSlug !== undefined ? { tagSlug: query.tagSlug } : {}),
-    ...(query.q !== undefined ? { titlePrefix: query.q } : {}),
+    ...(query.q !== undefined ? { titleSearch: query.q } : {}),
   };
   const { skip, take } = toSkipTake(query);
 
